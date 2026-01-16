@@ -40,7 +40,12 @@
 
       <div class="field">
         <div class="lbl">Almacén</div>
-        <select id="fAlmacen" multiple size="5"></select>
+        <input id="fAlmacenSearch" type="text" placeholder="Buscar almacén (ej: 34)" />
+        <div class="miniBtns">
+          <button id="btnAlmAll" type="button" class="btn secondary">Todos</button>
+          <button id="btnAlmNone" type="button" class="btn secondary">Ninguno</button>
+        </div>
+        <div id="fAlmacenList" class="checklist"></div>
       </div>
 
       <div class="field">
@@ -114,5 +119,3 @@
   <script src="./app.js"></script>
 </body>
 </html>
-
-
