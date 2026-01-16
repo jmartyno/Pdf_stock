@@ -66,40 +66,41 @@
       <h2>Resumen por artículo</h2>
       <div id="summaryWrap" class="tableWrap"></div>
     </section>
+
+    <section class="spacer"></section>
+
+    <!-- Conciliación -->
+    <section class="panel no-print">
+      <div class="row">
+        <div class="field">
+          <div class="lbl">CSV Velneo</div>
+          <input id="fileVelneo" type="file" accept=".csv">
+        </div>
+
+        <div class="field">
+          <div class="lbl">CSV Tiendas (varios)</div>
+          <input id="fileTiendas" type="file" accept=".csv" multiple>
+        </div>
+
+        <div class="field">
+          <div class="lbl">Generar conciliación</div>
+          <button id="btnConciliar" class="btn">Conciliar</button>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Conciliación</h2>
+      <div id="conciliacionWrap" class="tableWrap"></div>
+    </section>
   </main>
-  <section class="panel no-print">
-  <div class="row">
-    <div class="field">
-      <div class="lbl">CSV Velneo</div>
-      <input id="fileVelneo" type="file" accept=".csv">
-    </div>
-
-    <div class="field">
-      <div class="lbl">CSV Tiendas (varios)</div>
-      <input id="fileTiendas" type="file" accept=".csv" multiple>
-    </div>
-
-    <div class="field">
-      <div class="lbl">Generar conciliación</div>
-      <button id="btnConciliar" class="btn">Conciliar</button>
-    </div>
-  </div>
-</section>
-
-<section>
-  <h2>Conciliación</h2>
-  <div id="conciliacionWrap" class="tableWrap"></div>
-</section>
-
 
   <footer class="foot no-print">
     Tip: Para PDF, usa “Imprimir” → Destino “Guardar como PDF” → Diseño “Horizontal”.
   </footer>
-  
+
+  <!-- IMPORTANTE: conciliacion.js antes que app.js -->
   <script src="./modules/conciliacion.js"></script>
-  <script src="./app.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>
-
-
