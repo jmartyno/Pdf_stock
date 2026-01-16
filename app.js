@@ -347,12 +347,12 @@ function makeSummary(rows, opts){
 function applyFilters(){
   const q = $("qNombre").value.trim().toLowerCase();
   const g = $("fGrupo").value;
-  const a = $("fAlmacen").value;
+  const aSel = Array.from($("fAlmacen").selectedOptions).map(o => o.value);
 
   const filtered = state.rows.filter(r=>{
     if (q && !String(r.Nombre).toLowerCase().includes(q)) return false;
     if (g && r.Grupo !== g) return false;
-    if (a && String(r.Almacen) !== a) return false;
+    if (aSel.length && !aSel.includes(String(r.Almacen))) return false;
     return true;
   });
 
@@ -522,4 +522,5 @@ function setupUI(){
 }
 
 setupUI();
+
 
