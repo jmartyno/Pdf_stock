@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Stock por tallas</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="bar no-print">
+    <div class="left">
+      <h1>Stock por tallas</h1>
+      <div class="hint">Carga un CSV local (separado por “;”). No se sube a ningún sitio.</div>
+    </div>
+    <div class="right">
+      <label class="btn">
+        <input id="file" type="file" accept=".csv,text/csv" hidden />
+        Cargar CSV
+      </label>
+      <button id="btnPrint" class="btn">Imprimir / PDF</button>
+    </div>
+  </header>
+
+  <section class="panel no-print">
+    <div class="row">
+      <div class="field">
+        <div class="lbl">Buscar (Nombre)</div>
+        <input id="qNombre" type="text" placeholder="Ej: CAZ WALER" />
+      </div>
+      <div class="field">
+        <div class="lbl">Grupo</div>
+        <select id="fGrupo"></select>
+      </div>
+      <div class="field">
+        <div class="lbl">Almacén</div>
+        <select id="fAlmacen"></select>
+      </div>
+      <div class="field">
+        <div class="lbl">Ocultar filas vacías</div>
+        <label class="chk"><input id="hideEmptyRows" type="checkbox" checked /> Sí</label>
+      </div>
+      <div class="field">
+        <div class="lbl">Ocultar 0</div>
+        <label class="chk"><input id="hideZeros" type="checkbox" checked /> Sí</label>
+      </div>
+      <div class="field">
+        <div class="lbl">&nbsp;</div>
+        <button id="btnReset" class="btn secondary">Reset</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div id="meta" class="meta">Sin archivo cargado.</div>
+    </div>
+  </section>
+
+  <main class="content">
+    <section>
+      <h2>Tabla por tallas</h2>
+      <div id="tableWrap" class="tableWrap"></div>
+    </section>
+
+    <section class="spacer"></section>
+
+    <section>
+      <h2>Resumen por artículo</h2>
+      <div id="summaryWrap" class="tableWrap"></div>
+    </section>
+  </main>
+
+  <footer class="foot no-print">
+    Tip: Para PDF, usa “Imprimir” → Destino “Guardar como PDF” → Diseño “Horizontal”.
+  </footer>
+
+  <script src="./app.js"></script>
+</body>
+</html>
