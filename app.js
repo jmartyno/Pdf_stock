@@ -117,6 +117,40 @@ function fillSelect(selectEl, values){
   });
 }
 
+/* ===== Grupo tipo Excel ===== */
+
+function fillGrupoChecklist(groups){
+  const box = $("fGrupoList");
+  if (!box) return;
+  box.innerHTML = "";
+
+  groups.forEach(g=>{
+    const lbl = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = g;
+    cb.checked = true;
+    lbl.appendChild(cb);
+    lbl.append(" " + g);
+    box.appendChild(lbl);
+  });
+}
+
+function getSelectedGrupos(){
+  const els = document.querySelectorAll("#fGrupoList input:checked");
+  return Array.from(els).map(cb => cb.value);
+}
+
+function applyGrupoSearch(){
+  const q = ($("fGrupoSearch")?.value || "").toLowerCase();
+  document.querySelectorAll("#fGrupoList label").forEach(lbl=>{
+    const txt = lbl.textContent.toLowerCase();
+    lbl.style.display = (!q || txt.includes(q)) ? "" : "none";
+  });
+}
+
+/* ===== Pivot ===== */
+
 function buildPivot(rows){
   const map = new Map();
   const tallas = sortTallas(rows.map(r => r.Talla));
@@ -204,10 +238,9 @@ function makeTablePivot(pivot, opts){
     const totalN = rowTotal(it.byTallaNuevo);
     const totalU = rowTotal(it.byTallaUsado);
 
-// ¿Hay alguna talla con valor NO 0?
+    // ¿Hay alguna talla con valor NO 0?
     const hasN = Array.from(it.byTallaNuevo.values()).some(v => Number(v) !== 0);
     const hasU = Array.from(it.byTallaUsado.values()).some(v => Number(v) !== 0);
-
 
     const paintN = hideEmptyRows ? hasN : true;
     const paintU = hideEmptyRows ? hasU : true;
@@ -346,12 +379,20 @@ function makeSummary(rows, opts){
 
 function applyFilters(){
   const q = $("qNombre").value.trim().toLowerCase();
-  const g = $("fGrupo").value;
-  const aSel = Array.from($("fAlmacen").selectedOptions).map(o => o.value);
+
+  // Grupo (Excel-like)
+  const gruposSel = getSelectedGrupos();
+  const gTxt = ($("fGrupoSearch")?.value || "").trim().toLowerCase();
+
+  // Almacén multi
+  const aSel = Array.from($("fAlmacen").selectedOptions).map(o => o.value).filter(Boolean);
 
   const filtered = state.rows.filter(r=>{
     if (q && !String(r.Nombre).toLowerCase().includes(q)) return false;
-    if (g && r.Grupo !== g) return false;
+
+    if (gruposSel.length && !gruposSel.includes(r.Grupo)) return false;
+    if (gTxt && !String(r.Grupo).toLowerCase().includes(gTxt)) return false;
+
     if (aSel.length && !aSel.includes(String(r.Almacen))) return false;
     return true;
   });
@@ -458,7 +499,9 @@ function setupUI(){
       state.grupos = [...new Set(rows.map(r=>r.Grupo))].sort((a,b)=>a.localeCompare(b,"es"));
       state.almacenes = [...new Set(rows.map(r=>String(r.Almacen)))].sort((a,b)=>a.localeCompare(b,"es"));
 
-      fillSelect($("fGrupo"), state.grupos);
+      fillGrupoChecklist(state.grupos);
+      applyGrupoSearch();
+
       fillSelect($("fAlmacen"), state.almacenes);
 
       $("meta").textContent = `Archivo: ${f.name} | Filas: ${rows.length}`;
@@ -466,6 +509,24 @@ function setupUI(){
     }catch(err){
       alert(err?.message ?? String(err));
     }
+  });
+
+  // Grupo listeners
+  $("fGrupoSearch")?.addEventListener("input", ()=>{
+    applyGrupoSearch();
+    applyFilters();
+  });
+
+  $("fGrupoList")?.addEventListener("change", applyFilters);
+
+  $("btnGrupoAll")?.addEventListener("click", ()=>{
+    document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=true);
+    applyFilters();
+  });
+
+  $("btnGrupoNone")?.addEventListener("click", ()=>{
+    document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=false);
+    applyFilters();
   });
 
   // 2) Conciliación: cargar Velneo
@@ -504,15 +565,19 @@ function setupUI(){
   });
 
   // filtros pivot
-  ["qNombre","fGrupo","fAlmacen","hideZeros","hideEmptyRows"].forEach(id=>{
+  ["qNombre","fAlmacen","hideZeros","hideEmptyRows"].forEach(id=>{
     $(id)?.addEventListener("input", applyFilters);
     $(id)?.addEventListener("change", applyFilters);
   });
 
   $("btnReset")?.addEventListener("click", ()=>{
     $("qNombre").value="";
-    $("fGrupo").value="";
     $("fAlmacen").value="";
+
+    $("fGrupoSearch").value="";
+    document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=true);
+    applyGrupoSearch();
+
     $("hideZeros").checked=true;
     $("hideEmptyRows").checked=true;
     applyFilters();
@@ -522,5 +587,3 @@ function setupUI(){
 }
 
 setupUI();
-
-
