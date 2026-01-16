@@ -434,6 +434,43 @@ function parseTiendasCSV(text){
     };
   });
 }
+function renderTablaConciliacion(rows){
+  const wrap = $("conciliacionWrap");
+  wrap.innerHTML = "";
+
+  if(!rows.length){
+    wrap.textContent = "Sin diferencias.";
+    return;
+  }
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+
+  ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(h=>{
+    const th=document.createElement("th");
+    th.textContent=h;
+    trh.appendChild(th);
+  });
+
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody=document.createElement("tbody");
+
+  rows.forEach(r=>{
+    const tr=document.createElement("tr");
+    ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(k=>{
+      const td=document.createElement("td");
+      td.textContent = r[k];
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+}
 
   ["qNombre","fGrupo","fAlmacen","hideZeros","hideEmptyRows"].forEach(id=>{
     $(id).addEventListener("input", applyFilters);
@@ -455,5 +492,6 @@ function parseTiendasCSV(text){
 }
 
 setupUI();
+
 
 
