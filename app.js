@@ -7,6 +7,9 @@ const state = {
   tallas: [],
   grupos: [],
   almacenes: [],
+  state.velneo = [];
+  state.tiendas = [];
+
 };
 
 function normalizeKey(s){
@@ -426,3 +429,4 @@ function setupUI(){
 }
 
 setupUI();
+
