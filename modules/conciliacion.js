@@ -1,166 +1,179 @@
 // modules/conciliacion.js
-// Genera conciliación VELNEO vs CSV Tiendas por EAN + Uso + Almacén, con tallas en columnas (texto) + total.
+// Conciliación Velneo vs CSV Tiendas
+// Salida: filas para tabla (Concepto, Descripcion, Almacen, Uso, Tallas, Total)
 
-function norm(s){ return String(s ?? "").trim(); }
-function normKey(s){ return norm(s).toLowerCase(); }
-function num(v){ const n = Number(String(v ?? "").replace(",", ".").trim()); return Number.isFinite(n) ? n : 0; }
+(function(){
 
-function addTo(map, key, value){
-  map.set(key, (map.get(key) ?? 0) + value);
-}
+  function norm(v){ return String(v ?? "").trim(); }
 
-function joinTallas(mapTalla){
-  // "46 2 | 48 1 | UNICO 5"  (solo las no-0)
-  const parts = [];
-  for (const [t,v] of mapTalla.entries()){
-    if ((Number(v) || 0) !== 0) parts.push(`${t} ${v}`);
-  }
-  return parts.join(" | ");
-}
-
-function totalFromMap(mapTalla){
-  let t = 0;
-  for (const v of mapTalla.values()) t += (Number(v) || 0);
-  return t;
-}
-
-// ----- API pública -----
-function generarConciliacion({ velneoRows, tiendasRows, mappingAlmacenes }){
-  velneoRows = Array.isArray(velneoRows) ? velneoRows : [];
-  tiendasRows = Array.isArray(tiendasRows) ? tiendasRows : [];
-  mappingAlmacenes = mappingAlmacenes || {};
-
-  // Index Velneo: (ean|almacen|uso) -> {concepto, descripcion, tallasMap}
-  const V = new Map();
-
-  for (const r of velneoRows){
-    const ean = norm(r.EAN ?? r.ean ?? r["Talla -> Código de barras"] ?? r["Talla -> C�digo de barras"]);
-    if (!ean) continue;
-
-    const talla = norm(r.Talla ?? r.talla);
-    const almacen = norm(r.Almacen ?? r.almacen);
-
-    // Concepto/Descripcion opcionales
-    const concepto = norm(r.Concepto ?? r.concepto ?? r.Grupo ?? r.grupo ?? "");
-    const descripcion = norm(r.Descripcion ?? r.descripcion ?? r.Nombre ?? r.nombre ?? "");
-
-    const stockNuevo = num(r.StockNuevo ?? r.stockNuevo);
-    const stockUsado = num(r.StockUsado ?? r.stockUsado);
-
-    // Nuevo
-    if (stockNuevo !== 0){
-      const key = `${ean}||${almacen}||NUEVO`;
-      if (!V.has(key)) V.set(key, { ean, almacen, uso:"Nuevo", concepto, descripcion, tallas:new Map() });
-      addTo(V.get(key).tallas, talla || "(sin talla)", stockNuevo);
-    }
-    // Usado
-    if (stockUsado !== 0){
-      const key = `${ean}||${almacen}||USADO`;
-      if (!V.has(key)) V.set(key, { ean, almacen, uso:"Usado", concepto, descripcion, tallas:new Map() });
-      addTo(V.get(key).tallas, talla || "(sin talla)", stockUsado);
-    }
+  function key(ean, talla, almacen){
+    return `${norm(ean)}||${norm(talla)}||${norm(almacen)}`;
   }
 
-  // Index Tiendas: (ean|almacenVelneo|uso) -> {concepto, descripcion, tallasMap}
-  const T = new Map();
+  function add(map, k, field, val){
+    if(!map.has(k)) map.set(k, { nuevo:0, usado:0 });
+    map.get(k)[field] += (Number(val) || 0);
+  }
 
-  for (const r of tiendasRows){
-    const ean = norm(r.ean ?? r.EAN);
-    if (!ean) continue;
+  // Convierte a string tipo: "44:-2 46:5 UNICO:1"
+  function tallasToText(mapTalla){
+    const pairs = [...mapTalla.entries()]
+      .filter(([,v]) => (Number(v)||0) !== 0)
+      .map(([t,v]) => `${t}:${v}`);
+    return pairs.join(" ");
+  }
 
-    const talla = norm(r.talla ?? r.Talla);
-    const usoRaw = normKey(r.uso ?? r.Uso);
-    const uso = usoRaw === "usado" || usoRaw === "alquiler" ? "USADO" : "NUEVO";
+  window.generarConciliacion = function({
+    velneoRows,
+    tiendasRows,
+    mappingAlmacenes  // ej: { "3":"34", "4":"34", "7":"34" }
+  }){
 
-    const tienda = norm(r.tienda ?? r.Tienda);
-    const almacenVelneo = norm(mappingAlmacenes[tienda] ?? mappingAlmacenes[String(tienda)] ?? "");
-    if (!almacenVelneo) continue; // si no hay mapping, no sabemos con qué almacén conciliar
+    // 1) Velneo -> Map por (EAN,talla,almacen) con nuevo/usado
+    const velneo = new Map();
+    const metaByEAN = new Map(); // {concepto, descripcion}
 
-    const concepto = norm(r.concepto ?? r.Concepto ?? "");
-    const descripcion = norm(r.descripcion ?? r.Descripcion ?? "");
+    velneoRows.forEach(r=>{
+      const ean = norm(r.EAN);
+      if (!ean) return;
 
-    const unidades = num(r.unidades ?? r.Unidades);
+      const almacen = norm(r.Almacen);
+      const talla = norm(r.Talla);
 
-    if (unidades === 0) continue;
+      const k = key(ean, talla, almacen);
 
-    const key = `${ean}||${almacenVelneo}||${uso}`;
-    if (!T.has(key)) T.set(key, {
-      ean,
-      almacen: almacenVelneo,
-      uso: (uso === "USADO" ? "Usado" : "Nuevo"),
-      concepto,
-      descripcion,
-      tallas: new Map()
+      add(velneo, k, "nuevo", r.StockNuevo);
+      add(velneo, k, "usado", r.StockUsado);
+
+      if(!metaByEAN.has(ean)){
+        metaByEAN.set(ean, {
+          concepto: norm(r.Concepto),
+          descripcion: norm(r.Descripcion)
+        });
+      }
     });
 
-    addTo(T.get(key).tallas, talla || "(sin talla)", unidades);
-  }
+    // 2) Tiendas -> Map por (EAN,talla,almacenDestino) con nuevo/usado
+    const tiendas = new Map();
 
-  // Comparar keys
-  const keys = new Set([...V.keys(), ...T.keys()]);
-  const out = [];
+    tiendasRows.forEach(r=>{
+      const tienda = norm(r.tienda);
+      const almacenDestino = mappingAlmacenes[tienda];
+      if(!almacenDestino) return;
 
-  let comparados = 0;
+      const ean = norm(r.ean);
+      if (!ean) return;
 
-  for (const k of keys){
-    const v = V.get(k);
-    const t = T.get(k);
+      const talla = norm(r.talla);
+      const k = key(ean, talla, almacenDestino);
 
-    const ean = (v?.ean || t?.ean || "");
-    const almacen = (v?.almacen || t?.almacen || "");
-    const uso = (v?.uso || t?.uso || "");
+      const uso = norm(r.uso).toUpperCase();
+      const field = (uso === "NUEVO") ? "nuevo" : "usado";
 
-    const concepto = (v?.concepto || t?.concepto || "");
-    const descripcion = (v?.descripcion || t?.descripcion || "");
+      add(tiendas, k, field, r.unidades);
+    });
 
-    const vTallas = v?.tallas || new Map();
-    const tTallas = t?.tallas || new Map();
+    // 3) Agregación final por (EAN, almacenDestino, uso) con tallas en mapa
+    //    y sacamos 3 filas: Velneo / CSV / Dif
+    const group = new Map(); // gkey -> {meta, uso, almacen, V:MapTalla, T:MapTalla, D:MapTalla}
 
-    // dif por talla
-    const allT = new Set([...vTallas.keys(), ...tTallas.keys()]);
-    const difTallas = new Map();
-    for (const talla of allT){
-      const dv = (Number(vTallas.get(talla)) || 0) - (Number(tTallas.get(talla)) || 0);
-      if (dv !== 0) difTallas.set(talla, dv);
+    function gkey(ean, almacen, uso){
+      return `${ean}||${almacen}||${uso}`;
     }
 
-    // si no hay diferencias, no pintamos (pero contamos)
-    comparados++;
-    if (difTallas.size === 0) continue;
+    const allKeys = new Set([...velneo.keys(), ...tiendas.keys()]);
 
-    // Líneas: VELNEO / CSV / DIF
-    const vLine = {
-      Concepto: concepto,
-      Descripcion: descripcion,
-      Almacen: almacen,
-      Uso: uso,
-      Tallas: joinTallas(vTallas),
-      Total: totalFromMap(vTallas),
-    };
-    const tLine = {
-      Concepto: concepto,
-      Descripcion: descripcion,
-      Almacen: "CSV",
-      Uso: uso,
-      Tallas: joinTallas(tTallas),
-      Total: totalFromMap(tTallas),
-    };
-    const dLine = {
-      Concepto: concepto,
-      Descripcion: descripcion,
-      Almacen: "DIF",
-      Uso: uso,
-      Tallas: joinTallas(difTallas),
-      Total: totalFromMap(difTallas),
-    };
+    allKeys.forEach(k=>{
+      const [ean, talla, almacen] = k.split("||");
+      const m = metaByEAN.get(ean);
+      if(!m) return; // si no existe en Velneo, no podemos poner concepto/desc
 
-    out.push(vLine, tLine, dLine);
-  }
+      const v = velneo.get(k) || {nuevo:0, usado:0};
+      const t = tiendas.get(k) || {nuevo:0, usado:0};
 
-  // Si no hay diferencias, devolvemos [] pero dejamos un contador accesible
-  out._meta = { comparados, velneo: V.size, tiendas: T.size };
-  return out;
-}
+      ["nuevo","usado"].forEach(uso=>{
+        const V = Number(v[uso] || 0);
+        const T = Number(t[uso] || 0);
+        const D = V - T;
 
-// Exponer global
-window.generarConciliacion = generarConciliacion;
+        const GK = gkey(ean, almacen, uso);
+        if(!group.has(GK)){
+          group.set(GK, {
+            concepto: m.concepto,
+            descripcion: m.descripcion,
+            almacen: almacen,
+            uso: (uso === "nuevo" ? "Nuevo" : "Usado"),
+            V: new Map(),
+            T: new Map(),
+            D: new Map()
+          });
+        }
+        const it = group.get(GK);
+
+        if (V !== 0) it.V.set(talla, (it.V.get(talla) || 0) + V);
+        if (T !== 0) it.T.set(talla, (it.T.get(talla) || 0) + T);
+        if (D !== 0) it.D.set(talla, (it.D.get(talla) || 0) + D);
+      });
+    });
+
+    // 4) Flatten
+    const resultado = [];
+
+    function sumMap(m){
+      let s=0;
+      for(const v of m.values()) s += Number(v)||0;
+      return s;
+    }
+
+    for(const it of group.values()){
+      const totalV = sumMap(it.V);
+      const totalT = sumMap(it.T);
+      const totalD = sumMap(it.D);
+
+      if (totalV !== 0){
+        resultado.push({
+          Concepto: it.concepto,
+          Descripcion: it.descripcion,
+          Almacen: it.almacen,
+          Uso: it.uso,
+          Tallas: tallasToText(it.V),
+          Total: totalV
+        });
+      }
+
+      if (totalT !== 0){
+        resultado.push({
+          Concepto: it.concepto,
+          Descripcion: it.descripcion,
+          Almacen: "CSV",
+          Uso: it.uso,
+          Tallas: tallasToText(it.T),
+          Total: totalT
+        });
+      }
+
+      if (totalD !== 0){
+        resultado.push({
+          Concepto: it.concepto,
+          Descripcion: it.descripcion,
+          Almacen: "Dif",
+          Uso: it.uso,
+          Tallas: tallasToText(it.D),
+          Total: totalD
+        });
+      }
+    }
+
+    // Orden: Concepto/Desc/uso y que Dif quede visible
+    resultado.sort((a,b)=>{
+      const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
+      const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
+      if (ak !== bk) return ak.localeCompare(bk, "es");
+      const prio = (x)=> x.Almacen==="Dif" ? 0 : (x.Almacen==="CSV" ? 1 : 2);
+      return prio(a)-prio(b);
+    });
+
+    return resultado;
+  };
+
+})();
