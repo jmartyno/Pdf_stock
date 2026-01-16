@@ -28,14 +28,26 @@ function isNumericTalla(t){
 }
 
 function sortTallas(list){
-  const arr = [...new Set(list.map(x => String(x).trim()))];
+  const arr = [...new Set(list.map(x => String(x).trim()).filter(Boolean))];
+
+  const norm = (s)=> normalizeKey(s);
+  const isUnico = (s)=> {
+    const n = norm(s);
+    return n === "unico" || n === "u" || n === "unica";
+  };
+
   arr.sort((a,b)=>{
+    const au = isUnico(a), bu = isUnico(b);
+    if (au && !bu) return -1;   // UNICO primero
+    if (!au && bu) return 1;
+
     const an=isNumericTalla(a), bn=isNumericTalla(b);
     if (an && bn) return Number(a)-Number(b);
     if (an && !bn) return -1;
     if (!an && bn) return 1;
     return a.localeCompare(b, "es");
   });
+
   return arr;
 }
 
@@ -102,23 +114,6 @@ function parseCSV(text){
   return rows;
 }
 
-function fillSelect(selectEl, values){
-  selectEl.innerHTML = "";
-  const optAll = document.createElement("option");
-  optAll.value = "";
-  optAll.textContent = "Todos";
-  selectEl.appendChild(optAll);
-
-  values.forEach(v=>{
-    const o=document.createElement("option");
-    o.value = v;
-    o.textContent = v;
-    selectEl.appendChild(o);
-  });
-}
-
-/* ===== Grupo tipo Excel ===== */
-
 function fillGrupoChecklist(groups){
   const box = $("fGrupoList");
   if (!box) return;
@@ -149,7 +144,35 @@ function applyGrupoSearch(){
   });
 }
 
-/* ===== Pivot ===== */
+function fillAlmacenChecklist(almacenes){
+  const box = $("fAlmacenList");
+  if (!box) return;
+  box.innerHTML = "";
+
+  almacenes.forEach(a=>{
+    const lbl = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.value = String(a);
+    cb.checked = true;
+    lbl.appendChild(cb);
+    lbl.append(" " + a);
+    box.appendChild(lbl);
+  });
+}
+
+function getSelectedAlmacenes(){
+  return Array.from(document.querySelectorAll("#fAlmacenList input:checked"))
+    .map(cb => cb.value);
+}
+
+function applyAlmacenSearch(){
+  const q = ($("fAlmacenSearch")?.value || "").toLowerCase();
+  document.querySelectorAll("#fAlmacenList label").forEach(lbl=>{
+    const txt = lbl.textContent.toLowerCase();
+    lbl.style.display = (!q || txt.includes(q)) ? "" : "none";
+  });
+}
 
 function buildPivot(rows){
   const map = new Map();
@@ -238,9 +261,9 @@ function makeTablePivot(pivot, opts){
     const totalN = rowTotal(it.byTallaNuevo);
     const totalU = rowTotal(it.byTallaUsado);
 
-    // ¿Hay alguna talla con valor NO 0?
-    const hasN = Array.from(it.byTallaNuevo.values()).some(v => Number(v) !== 0);
-    const hasU = Array.from(it.byTallaUsado.values()).some(v => Number(v) !== 0);
+    // robusto: mira las tallas del pivot
+    const hasN = tallas.some(t => (Number(it.byTallaNuevo.get(t)) || 0) !== 0);
+    const hasU = tallas.some(t => (Number(it.byTallaUsado.get(t)) || 0) !== 0);
 
     const paintN = hideEmptyRows ? hasN : true;
     const paintU = hideEmptyRows ? hasU : true;
@@ -380,12 +403,13 @@ function makeSummary(rows, opts){
 function applyFilters(){
   const q = $("qNombre").value.trim().toLowerCase();
 
-  // Grupo (Excel-like)
+  // Grupo tipo Excel
   const gruposSel = getSelectedGrupos();
   const gTxt = ($("fGrupoSearch")?.value || "").trim().toLowerCase();
 
-  // Almacén multi
-  const aSel = Array.from($("fAlmacen").selectedOptions).map(o => o.value).filter(Boolean);
+  // Almacén tipo Excel
+  const aSel = getSelectedAlmacenes();
+  const aTxt = ($("fAlmacenSearch")?.value || "").trim().toLowerCase();
 
   const filtered = state.rows.filter(r=>{
     if (q && !String(r.Nombre).toLowerCase().includes(q)) return false;
@@ -394,6 +418,8 @@ function applyFilters(){
     if (gTxt && !String(r.Grupo).toLowerCase().includes(gTxt)) return false;
 
     if (aSel.length && !aSel.includes(String(r.Almacen))) return false;
+    if (aTxt && !String(r.Almacen).toLowerCase().includes(aTxt)) return false;
+
     return true;
   });
 
@@ -502,7 +528,8 @@ function setupUI(){
       fillGrupoChecklist(state.grupos);
       applyGrupoSearch();
 
-      fillSelect($("fAlmacen"), state.almacenes);
+      fillAlmacenChecklist(state.almacenes);
+      applyAlmacenSearch();
 
       $("meta").textContent = `Archivo: ${f.name} | Filas: ${rows.length}`;
       applyFilters();
@@ -516,16 +543,28 @@ function setupUI(){
     applyGrupoSearch();
     applyFilters();
   });
-
   $("fGrupoList")?.addEventListener("change", applyFilters);
-
   $("btnGrupoAll")?.addEventListener("click", ()=>{
     document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=true);
     applyFilters();
   });
-
   $("btnGrupoNone")?.addEventListener("click", ()=>{
     document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=false);
+    applyFilters();
+  });
+
+  // Almacén listeners
+  $("fAlmacenSearch")?.addEventListener("input", ()=>{
+    applyAlmacenSearch();
+    applyFilters();
+  });
+  $("fAlmacenList")?.addEventListener("change", applyFilters);
+  $("btnAlmAll")?.addEventListener("click", ()=>{
+    document.querySelectorAll("#fAlmacenList input[type=checkbox]").forEach(cb=>cb.checked=true);
+    applyFilters();
+  });
+  $("btnAlmNone")?.addEventListener("click", ()=>{
+    document.querySelectorAll("#fAlmacenList input[type=checkbox]").forEach(cb=>cb.checked=false);
     applyFilters();
   });
 
@@ -565,21 +604,25 @@ function setupUI(){
   });
 
   // filtros pivot
-  ["qNombre","fAlmacen","hideZeros","hideEmptyRows"].forEach(id=>{
+  ["qNombre","hideZeros","hideEmptyRows"].forEach(id=>{
     $(id)?.addEventListener("input", applyFilters);
     $(id)?.addEventListener("change", applyFilters);
   });
 
   $("btnReset")?.addEventListener("click", ()=>{
     $("qNombre").value="";
-    $("fAlmacen").value="";
 
     $("fGrupoSearch").value="";
     document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=true);
     applyGrupoSearch();
 
+    $("fAlmacenSearch").value="";
+    document.querySelectorAll("#fAlmacenList input[type=checkbox]").forEach(cb=>cb.checked=true);
+    applyAlmacenSearch();
+
     $("hideZeros").checked=true;
     $("hideEmptyRows").checked=true;
+
     applyFilters();
   });
 
