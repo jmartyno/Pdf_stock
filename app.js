@@ -3,11 +3,13 @@ const $ = (id) => document.getElementById(id);
 
 const state = {
   rows: [],
-  tallas: [],
   grupos: [],
   almacenes: [],
+
   velneo: [],
-  tiendas: []
+  tiendas: [],
+  concAll: [],
+  concTiendasList: []
 };
 
 function normalizeKey(s){
@@ -38,8 +40,8 @@ function sortTallas(list){
 
   arr.sort((a,b)=>{
     const au = isUnico(a), bu = isUnico(b);
-    if (au && !bu) return -1;   // UNICO primero
-    if (!au && bu) return 1;
+    if (au && !bu) return 1;     // UNICO al final
+    if (!au && bu) return -1;
 
     const an=isNumericTalla(a), bn=isNumericTalla(b);
     if (an && bn) return Number(a)-Number(b);
@@ -93,15 +95,7 @@ function parseCSV(text){
   const iNuevo  = pickIdx("Stock Nuevo");
   const iUsado  = pickIdx("Stock Alquiler", "Stock Usado", "Usado");
   const iAlm    = pickIdx("Almacén", "Almacen", "Almac�n");
-
-  // opcional: EAN / código barras
-  const iEan = pickIdx(
-    "Talla -> Código de barras",
-    "Talla -> C�digo de barras",
-    "EAN",
-    "Codigo de barras",
-    "Código de barras"
-  );
+  const iEAN    = pickIdx("Talla -> Código de barras", "Talla -> C�digo de barras", "EAN", "ean");
 
   const need = {iNombre,iGrupo,iTalla,iNuevo,iUsado,iAlm};
   if (Object.values(need).some(v => v < 0)){
@@ -118,72 +112,43 @@ function parseCSV(text){
       StockNuevo: toNumber(cols[iNuevo]),
       StockUsado: toNumber(cols[iUsado]),
       Almacen: cols[iAlm] ?? "",
-      EAN: iEan >= 0 ? String(cols[iEan] ?? "").trim() : ""
+      EAN: iEAN >= 0 ? (cols[iEAN] ?? "") : ""
     });
   }
   return rows;
 }
 
-/* ====== Grupo checklist ====== */
-function fillGrupoChecklist(groups){
-  const box = $("fGrupoList");
+/* ====== Checklist utils ====== */
+function fillChecklist(boxId, values, checked=true){
+  const box = $(boxId);
   if (!box) return;
   box.innerHTML = "";
-
-  groups.forEach(g=>{
+  values.forEach(v=>{
     const lbl = document.createElement("label");
     const cb = document.createElement("input");
     cb.type = "checkbox";
-    cb.value = g;
-    cb.checked = true;
+    cb.value = String(v);
+    cb.checked = checked;
     lbl.appendChild(cb);
-    lbl.append(" " + g);
+    lbl.append(" " + v);
     box.appendChild(lbl);
   });
 }
 
-function getSelectedGrupos(){
-  return Array.from(document.querySelectorAll("#fGrupoList input:checked"))
-    .map(cb => cb.value);
+function selectedChecklist(boxId){
+  return Array.from(document.querySelectorAll(`#${boxId} input:checked`)).map(cb => cb.value);
 }
 
-function applyGrupoSearch(){
-  const q = ($("fGrupoSearch")?.value || "").toLowerCase();
-  document.querySelectorAll("#fGrupoList label").forEach(lbl=>{
+function applySearchToChecklist(searchId, boxId){
+  const q = (($(searchId)?.value) || "").toLowerCase();
+  document.querySelectorAll(`#${boxId} label`).forEach(lbl=>{
     const txt = lbl.textContent.toLowerCase();
     lbl.style.display = (!q || txt.includes(q)) ? "" : "none";
   });
 }
 
-/* ====== Almacén checklist ====== */
-function fillAlmacenChecklist(almacenes){
-  const box = $("fAlmacenList");
-  if (!box) return;
-  box.innerHTML = "";
-
-  almacenes.forEach(a=>{
-    const lbl = document.createElement("label");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.value = String(a);
-    cb.checked = true;
-    lbl.appendChild(cb);
-    lbl.append(" " + a);
-    box.appendChild(lbl);
-  });
-}
-
-function getSelectedAlmacenes(){
-  return Array.from(document.querySelectorAll("#fAlmacenList input:checked"))
-    .map(cb => cb.value);
-}
-
-function applyAlmacenSearch(){
-  const q = ($("fAlmacenSearch")?.value || "").toLowerCase();
-  document.querySelectorAll("#fAlmacenList label").forEach(lbl=>{
-    const txt = lbl.textContent.toLowerCase();
-    lbl.style.display = (!q || txt.includes(q)) ? "" : "none";
-  });
+function setAll(boxId, val){
+  document.querySelectorAll(`#${boxId} input[type=checkbox]`).forEach(cb=>cb.checked=val);
 }
 
 /* ====== Pivot ====== */
@@ -217,9 +182,9 @@ function rowTotal(mapTalla){
 }
 
 function fmtCell(v, hideZeros){
-  if (hideZeros && (!v || v === 0)) return "";
-  if (Number.isInteger(v)) return String(v);
-  return String(v);
+  const n = Number(v) || 0;
+  if (hideZeros && n === 0) return "";
+  return Number.isInteger(n) ? String(n) : String(n);
 }
 
 function tdLeft(text, muted=false){
@@ -290,8 +255,7 @@ function makeTablePivot(pivot, opts){
       tr.appendChild(tdCenter(it.Almacen));
       tr.appendChild(tdTipo("Nuevo"));
       for (const t of tallas){
-        const v = it.byTallaNuevo.get(t) ?? 0;
-        tr.appendChild(tdCenter(fmtCell(v, hideZeros)));
+        tr.appendChild(tdCenter(fmtCell(it.byTallaNuevo.get(t) ?? 0, hideZeros)));
       }
       tr.appendChild(tdTotal(fmtCell(totalN, hideZeros)));
       tbody.appendChild(tr);
@@ -305,8 +269,7 @@ function makeTablePivot(pivot, opts){
       tr.appendChild(tdCenter("", true));
       tr.appendChild(tdTipo("Usado"));
       for (const t of tallas){
-        const v = it.byTallaUsado.get(t) ?? 0;
-        tr.appendChild(tdCenter(fmtCell(v, hideZeros)));
+        tr.appendChild(tdCenter(fmtCell(it.byTallaUsado.get(t) ?? 0, hideZeros)));
       }
       tr.appendChild(tdTotal(fmtCell(totalU, hideZeros)));
       tbody.appendChild(tr);
@@ -332,10 +295,8 @@ function makeSummary(rows, opts){
     it.Nuevo += r.StockNuevo;
     it.Usado += r.StockUsado;
   }
-  const items = [...map.values()].sort((a,b)=>{
-    return (a.Grupo+a.Nombre).localeCompare(b.Grupo+b.Nombre, "es");
-  });
 
+  const items = [...map.values()].sort((a,b)=> (a.Grupo+a.Nombre).localeCompare(b.Grupo+b.Nombre, "es"));
   let grandN=0, grandU=0;
 
   const table=document.createElement("table");
@@ -385,11 +346,7 @@ function makeSummary(rows, opts){
   }
 
   const trSep=document.createElement("tr");
-  trSep.appendChild(tdLeft(""));
-  trSep.appendChild(tdLeft(""));
-  trSep.appendChild(tdCenter(""));
-  trSep.appendChild(tdCenter(""));
-  trSep.appendChild(tdCenter(""));
+  for(let i=0;i<5;i++) trSep.appendChild(document.createElement("td"));
   tbody.appendChild(trSep);
 
   const trTN=document.createElement("tr");
@@ -419,32 +376,25 @@ function renderVacio(){
 }
 
 function applyFilters(){
-  const q = $("qNombre").value.trim().toLowerCase();
+  const q = ($("qNombre")?.value || "").trim().toLowerCase();
 
-  // Grupo tipo Excel
-  const gruposSel = getSelectedGrupos();
+  const gruposSel = selectedChecklist("fGrupoList");
   const gTxt = ($("fGrupoSearch")?.value || "").trim().toLowerCase();
 
-  // Almacén tipo Excel
-  const aSel = getSelectedAlmacenes();
+  const aSel = selectedChecklist("fAlmacenList");
   const aTxt = ($("fAlmacenSearch")?.value || "").trim().toLowerCase();
 
-  // Si hay checklist y no hay nada marcado => no mostrar nada
   const totalGrupos = document.querySelectorAll("#fGrupoList input").length;
   const totalAlm    = document.querySelectorAll("#fAlmacenList input").length;
-
   if (totalGrupos > 0 && gruposSel.length === 0) { renderVacio(); return; }
   if (totalAlm > 0 && aSel.length === 0) { renderVacio(); return; }
 
   const filtered = state.rows.filter(r=>{
     if (q && !String(r.Nombre).toLowerCase().includes(q)) return false;
-
-    if (gruposSel.length && !gruposSel.includes(r.Grupo)) return false;
+    if (gruposSel.length && !gruposSel.includes(String(r.Grupo))) return false;
     if (gTxt && !String(r.Grupo).toLowerCase().includes(gTxt)) return false;
-
     if (aSel.length && !aSel.includes(String(r.Almacen))) return false;
     if (aTxt && !String(r.Almacen).toLowerCase().includes(aTxt)) return false;
-
     return true;
   });
 
@@ -455,52 +405,47 @@ function applyFilters(){
 
   const pivot = buildPivot(filtered);
 
-  const wrap = $("tableWrap");
-  wrap.innerHTML = "";
-  wrap.appendChild(makeTablePivot(pivot, opts));
+  $("tableWrap").innerHTML = "";
+  $("tableWrap").appendChild(makeTablePivot(pivot, opts));
 
-  const sw = $("summaryWrap");
-  sw.innerHTML = "";
-  sw.appendChild(makeSummary(filtered, opts));
+  $("summaryWrap").innerHTML = "";
+  $("summaryWrap").appendChild(makeSummary(filtered, opts));
 
   $("meta").textContent = `Filas: ${filtered.length} | Artículos: ${pivot.items.length} | Tallas: ${pivot.tallas.length}`;
-} // <-- IMPORTANTE: cerramos applyFilters()
+}
 
-// ====== Conciliación helpers ======
+/* ====== Conciliación ====== */
 
 function parseVelneoCSV(text){
   const rows = parseCSV(text);
   return rows.map(r=>({
-    EAN: r["Talla -> Código de barras"] || r["Talla -> C�digo de barras"] || r.EAN || r.ean,
-    Concepto: r.Concepto,
-    Descripcion: r.Descripcion,
-    Talla: r.Talla,
-    StockNuevo: r.StockNuevo,
-    StockUsado: r.StockUsado,
-    Almacen: r.Almacen
+    EAN: r.EAN || r.ean || r["Talla -> Código de barras"] || r["Talla -> C�digo de barras"] || "",
+    Concepto: r.Concepto ?? "",
+    Descripcion: r.Descripcion ?? "",
+    Talla: r.Talla ?? "",
+    StockNuevo: toNumber(r.StockNuevo),
+    StockUsado: toNumber(r.StockUsado),
+    Almacen: String(r.Almacen ?? "").trim()
   }));
 }
 
 function parseTiendasCSV(text){
-  const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").slice(1);
-  return lines.filter(l=>l.trim()).map(l=>{
+  const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(Boolean);
+  if (lines.length <= 1) return [];
+  return lines.slice(1).filter(l=>l.trim()).map(l=>{
     const [fecha,sesion,tienda,uso,concepto,descripcion,talla,unidades,ean] = l.split(";");
     return {
-      ean: (ean ?? "").trim(),
-      talla: (talla ?? "").trim(),
-      uso: (uso ?? "").trim(),
+      tienda: String(tienda ?? "").trim(),
+      uso: String(uso ?? "").trim(),
+      talla: String(talla ?? "").trim(),
       unidades: toNumber(unidades),
-      tienda: (tienda ?? "").trim(),
-      concepto: (concepto ?? "").trim(),
-      descripcion: (descripcion ?? "").trim()
+      ean: String(ean ?? "").trim()
     };
   });
 }
 
 function renderTablaConciliacion(rows){
   const wrap = $("conciliacionWrap");
-  if (!wrap) return;
-
   wrap.innerHTML = "";
 
   if(!rows || !rows.length){
@@ -522,7 +467,6 @@ function renderTablaConciliacion(rows){
   table.appendChild(thead);
 
   const tbody=document.createElement("tbody");
-
   rows.forEach(r=>{
     const tr=document.createElement("tr");
     ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(k=>{
@@ -534,17 +478,113 @@ function renderTablaConciliacion(rows){
   });
 
   table.appendChild(tbody);
-  wrap.appendChild(table); // <-- IMPORTANTE: se estaba olvidando
+  wrap.appendChild(table);
+}
+
+function fillConcAlmacenDestinoOptions(almacenesVelneo){
+  const sel = $("cAlmacenDestino");
+  if (!sel) return;
+  sel.innerHTML = "";
+  almacenesVelneo.forEach(a=>{
+    const o=document.createElement("option");
+    o.value = String(a);
+    o.textContent = String(a);
+    sel.appendChild(o);
+  });
+}
+
+function fillConcTiendasChecklistFromData(){
+  const tiendas = [...new Set(state.tiendas.map(r=>String(r.tienda).trim()).filter(Boolean))]
+    .sort((a,b)=>a.localeCompare(b,"es"));
+  state.concTiendasList = tiendas;
+  fillChecklist("cTiendaList", tiendas, true);
+  applySearchToChecklist("cTiendaSearch", "cTiendaList");
+}
+
+function applyConciliacionViewFilters(){
+  const q = ($("cQ")?.value || "").trim().toLowerCase();
+  const soloDif = !!$("cSoloDif")?.checked;
+
+  let rows = state.concAll || [];
+
+  if (q){
+    rows = rows.filter(r=>{
+      const c = String(r.Concepto ?? "").toLowerCase();
+      const d = String(r.Descripcion ?? "").toLowerCase();
+      return c.includes(q) || d.includes(q);
+    });
+  }
+  if (soloDif){
+    rows = rows.filter(r => r.Almacen === "Dif");
+  }
+
+  $("cMeta").textContent = `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`;
+  renderTablaConciliacion(rows);
+}
+
+function buildMappingFromSelectedTiendas(destAlmacen){
+  const selTiendas = selectedChecklist("cTiendaList");
+  const map = {};
+  selTiendas.forEach(t=>{ map[String(t)] = String(destAlmacen); });
+  return map;
+}
+
+function runConciliacion(){
+  if (typeof generarConciliacion !== "function"){
+    alert("Falta cargar modules/conciliacion.js antes que app.js");
+    return;
+  }
+  if (!state.velneo.length){
+    alert("Carga primero el CSV de Velneo.");
+    return;
+  }
+  if (!state.tiendas.length){
+    alert("Carga primero los CSV de Tiendas.");
+    return;
+  }
+
+  const dest = String($("cAlmacenDestino")?.value || "").trim();
+  if (!dest){
+    alert("Selecciona Almacén destino (Velneo).");
+    return;
+  }
+
+  const mappingAlmacenes = buildMappingFromSelectedTiendas(dest);
+  const tiendasFiltradas = state.tiendas.filter(r => mappingAlmacenes[String(r.tienda).trim()] !== undefined);
+
+  const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
+
+  const res = generarConciliacion({
+    velneoRows: velneoFiltrado,
+    tiendasRows: tiendasFiltradas,
+    mappingAlmacenes
+  });
+
+  state.concAll = res;
+  applyConciliacionViewFilters();
+}
+
+function applyPreset(destAlmacen, tiendasList){
+  // set almacén destino
+  const sel = $("cAlmacenDestino");
+  if (sel) sel.value = String(destAlmacen);
+
+  // marcar solo esas tiendas
+  const wanted = new Set(tiendasList.map(String));
+  document.querySelectorAll("#cTiendaList input[type=checkbox]").forEach(cb=>{
+    cb.checked = wanted.has(String(cb.value));
+  });
+
+  applySearchToChecklist("cTiendaSearch", "cTiendaList");
 }
 
 function setupUI(){
-  // 1) Cargar CSV base (visualización pivot)
+  // Pivot CSV
   $("file")?.addEventListener("change", async (e)=>{
     const f = e.target.files?.[0];
     if (!f) return;
 
     const text = await f.text();
-
     try{
       const rows = parseCSV(text);
       state.rows = rows;
@@ -552,11 +592,11 @@ function setupUI(){
       state.grupos = [...new Set(rows.map(r=>r.Grupo))].sort((a,b)=>a.localeCompare(b,"es"));
       state.almacenes = [...new Set(rows.map(r=>String(r.Almacen)))].sort((a,b)=>a.localeCompare(b,"es"));
 
-      fillGrupoChecklist(state.grupos);
-      applyGrupoSearch();
+      fillChecklist("fGrupoList", state.grupos, true);
+      fillChecklist("fAlmacenList", state.almacenes, true);
 
-      fillAlmacenChecklist(state.almacenes);
-      applyAlmacenSearch();
+      applySearchToChecklist("fGrupoSearch", "fGrupoList");
+      applySearchToChecklist("fAlmacenSearch", "fAlmacenList");
 
       $("meta").textContent = `Archivo: ${f.name} | Filas: ${rows.length}`;
       applyFilters();
@@ -565,84 +605,17 @@ function setupUI(){
     }
   });
 
-  // Grupo listeners
-  $("fGrupoSearch")?.addEventListener("input", ()=>{
-    applyGrupoSearch();
-    applyFilters();
-  });
+  // Pivot listeners
+  $("fGrupoSearch")?.addEventListener("input", ()=>{ applySearchToChecklist("fGrupoSearch","fGrupoList"); applyFilters(); });
+  $("fAlmacenSearch")?.addEventListener("input", ()=>{ applySearchToChecklist("fAlmacenSearch","fAlmacenList"); applyFilters(); });
   $("fGrupoList")?.addEventListener("change", applyFilters);
-  $("btnGrupoAll")?.addEventListener("click", ()=>{
-    document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=true);
-    applyFilters();
-  });
-  $("btnGrupoNone")?.addEventListener("click", ()=>{
-    document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=false);
-    applyFilters();
-  });
-
-  // Almacén listeners
-  $("fAlmacenSearch")?.addEventListener("input", ()=>{
-    applyAlmacenSearch();
-    applyFilters();
-  });
   $("fAlmacenList")?.addEventListener("change", applyFilters);
-  $("btnAlmAll")?.addEventListener("click", ()=>{
-    document.querySelectorAll("#fAlmacenList input[type=checkbox]").forEach(cb=>cb.checked=true);
-    applyFilters();
-  });
-  $("btnAlmNone")?.addEventListener("click", ()=>{
-    document.querySelectorAll("#fAlmacenList input[type=checkbox]").forEach(cb=>cb.checked=false);
-    applyFilters();
-  });
 
-  // 2) Conciliación: cargar Velneo
-  $("fileVelneo")?.addEventListener("change", async (e)=>{
-    const f = e.target.files?.[0];
-    if(!f) return;
-    state.velneo = parseVelneoCSV(await f.text());
-  });
+  $("btnGrupoAll")?.addEventListener("click", ()=>{ setAll("fGrupoList", true); applyFilters(); });
+  $("btnGrupoNone")?.addEventListener("click", ()=>{ setAll("fGrupoList", false); applyFilters(); });
+  $("btnAlmAll")?.addEventListener("click", ()=>{ setAll("fAlmacenList", true); applyFilters(); });
+  $("btnAlmNone")?.addEventListener("click", ()=>{ setAll("fAlmacenList", false); applyFilters(); });
 
-  // 3) Conciliación: cargar Tiendas (varios)
-  $("fileTiendas")?.addEventListener("change", async (e)=>{
-    state.tiendas = [];
-    const files = Array.from(e.target.files || []);
-    for(const f of files){
-      state.tiendas.push(...parseTiendasCSV(await f.text()));
-    }
-  });
-
-  // 4) Conciliar
- $("btnConciliar")?.addEventListener("click", ()=>{
-  if (typeof generarConciliacion !== "function"){
-    alert("Falta cargar modules/conciliacion.js antes que app.js");
-    return;
-  }
-  if (!state.velneo.length) { alert("No has cargado CSV Velneo (o está vacío)."); return; }
-  if (!state.tiendas.length) { alert("No has cargado CSV Tiendas (o está vacío)."); return; }
-
-  const resultado = generarConciliacion({
-    velneoRows: state.velneo,
-    tiendasRows: state.tiendas,
-    mappingAlmacenes: {
-      "Ayala":"34",
-      "3":"34",
-      "4":"34",
-      "7":"34"
-    }
-  });
-
-  // si no hay filas, mostramos un mensaje útil
-  const meta = resultado._meta || {};
-  if (!resultado.length){
-    const wrap = $("conciliacionWrap");
-    wrap.textContent = `Sin diferencias. Comparados: ${meta.comparados ?? "?"} | Keys Velneo: ${meta.velneo ?? "?"} | Keys Tiendas: ${meta.tiendas ?? "?"}`;
-    return;
-  }
-
-  renderTablaConciliacion(resultado);
-});
-
-  // filtros pivot
   ["qNombre","hideZeros","hideEmptyRows"].forEach(id=>{
     $(id)?.addEventListener("input", applyFilters);
     $(id)?.addEventListener("change", applyFilters);
@@ -650,24 +623,65 @@ function setupUI(){
 
   $("btnReset")?.addEventListener("click", ()=>{
     $("qNombre").value="";
-
     $("fGrupoSearch").value="";
-    document.querySelectorAll("#fGrupoList input[type=checkbox]").forEach(cb=>cb.checked=true);
-    applyGrupoSearch();
-
     $("fAlmacenSearch").value="";
-    document.querySelectorAll("#fAlmacenList input[type=checkbox]").forEach(cb=>cb.checked=true);
-    applyAlmacenSearch();
-
+    setAll("fGrupoList", true);
+    setAll("fAlmacenList", true);
+    applySearchToChecklist("fGrupoSearch","fGrupoList");
+    applySearchToChecklist("fAlmacenSearch","fAlmacenList");
     $("hideZeros").checked=true;
     $("hideEmptyRows").checked=true;
-
     applyFilters();
   });
 
   $("btnPrint")?.addEventListener("click", ()=> window.print());
+
+  // Conciliación: cargar Velneo
+  $("fileVelneo")?.addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
+    state.velneo = parseVelneoCSV(await f.text());
+
+    const almacenesVelneo = [...new Set(state.velneo.map(r=>String(r.Almacen)).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,"es"));
+    fillConcAlmacenDestinoOptions(almacenesVelneo);
+
+    $("cMeta").textContent = `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`;
+  });
+
+  // Conciliación: cargar Tiendas (varios)
+  $("fileTiendas")?.addEventListener("change", async (e)=>{
+    state.tiendas = [];
+    const files = Array.from(e.target.files || []);
+    for(const f of files){
+      state.tiendas.push(...parseTiendasCSV(await f.text()));
+    }
+    fillConcTiendasChecklistFromData();
+    $("cMeta").textContent = `Tiendas cargadas: ${state.tiendas.length} filas | Tiendas detectadas: ${state.concTiendasList.join(", ")}`;
+  });
+
+  // Conciliación: filtros vista
+  $("cQ")?.addEventListener("input", applyConciliacionViewFilters);
+  $("cSoloDif")?.addEventListener("change", applyConciliacionViewFilters);
+
+  // Tiendas checklist
+  $("cTiendaSearch")?.addEventListener("input", ()=>{
+    applySearchToChecklist("cTiendaSearch","cTiendaList");
+  });
+  $("cTiendaList")?.addEventListener("change", ()=>{ /* no recalcula, solo afecta al próximo conciliar */ });
+  $("cTiendaAll")?.addEventListener("click", ()=>{ setAll("cTiendaList", true); });
+  $("cTiendaNone")?.addEventListener("click", ()=>{ setAll("cTiendaList", false); });
+
+  // Presets
+  $("btnPreset34")?.addEventListener("click", ()=>{
+    applyPreset("34", ["3","4","7"]);
+  });
+  $("btnPreset1")?.addEventListener("click", ()=>{
+    applyPreset("1", ["1"]);
+  });
+
+  // Conciliar
+  $("btnConciliar")?.addEventListener("click", runConciliacion);
 }
 
 setupUI();
-
-
