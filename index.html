@@ -27,22 +27,32 @@
         <div class="lbl">Buscar (Nombre)</div>
         <input id="qNombre" type="text" placeholder="Ej: CAZ WALER" />
       </div>
+
       <div class="field">
         <div class="lbl">Grupo</div>
-        <select id="fGrupo"></select>
+        <input id="fGrupoSearch" type="text" placeholder="Buscar grupo (ej: CHQ)" />
+        <div class="miniBtns">
+          <button id="btnGrupoAll" type="button" class="btn secondary">Todos</button>
+          <button id="btnGrupoNone" type="button" class="btn secondary">Ninguno</button>
+        </div>
+        <div id="fGrupoList" class="checklist"></div>
       </div>
+
       <div class="field">
         <div class="lbl">Almacén</div>
         <select id="fAlmacen" multiple size="5"></select>
       </div>
+
       <div class="field">
         <div class="lbl">Ocultar filas vacías</div>
         <label class="chk"><input id="hideEmptyRows" type="checkbox" checked /> Sí</label>
       </div>
+
       <div class="field">
         <div class="lbl">Ocultar 0</div>
         <label class="chk"><input id="hideZeros" type="checkbox" checked /> Sí</label>
       </div>
+
       <div class="field">
         <div class="lbl">&nbsp;</div>
         <button id="btnReset" class="btn secondary">Reset</button>
@@ -104,4 +114,5 @@
   <script src="./app.js"></script>
 </body>
 </html>
+
 
