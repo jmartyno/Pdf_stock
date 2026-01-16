@@ -12,6 +12,11 @@ const state = {
   concTiendasList: []
 };
 
+function setText(id, txt){
+  const el = $(id);
+  if (el) el.textContent = txt;
+}
+
 function normalizeKey(s){
   return String(s ?? "").trim().toLowerCase()
     .replaceAll("á","a").replaceAll("é","e").replaceAll("í","i").replaceAll("ó","o").replaceAll("ú","u")
@@ -419,10 +424,10 @@ function applyFilters(){
 function parseVelneoCSV(text){
   const rows = parseCSV(text);
   return rows.map(r=>({
-    EAN: r.EAN || r.ean || r["Talla -> Código de barras"] || r["Talla -> C�digo de barras"] || "",
-    Concepto: r.Concepto ?? "",
-    Descripcion: r.Descripcion ?? "",
-    Talla: r.Talla ?? "",
+    EAN: String(r.EAN || r.ean || "").trim(),
+    Concepto: String(r.Concepto ?? r.Nombre ?? "").trim(),
+    Descripcion: String(r.Descripcion ?? r.Grupo ?? "").trim(),
+    Talla: String(r.Talla ?? "").trim(),
     StockNuevo: toNumber(r.StockNuevo),
     StockUsado: toNumber(r.StockUsado),
     Almacen: String(r.Almacen ?? "").trim()
@@ -446,6 +451,7 @@ function parseTiendasCSV(text){
 
 function renderTablaConciliacion(rows){
   const wrap = $("conciliacionWrap");
+  if (!wrap) return;
   wrap.innerHTML = "";
 
   if(!rows || !rows.length){
@@ -518,7 +524,7 @@ function applyConciliacionViewFilters(){
     rows = rows.filter(r => r.Almacen === "Dif");
   }
 
-  $("cMeta").textContent = `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`;
+  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
   renderTablaConciliacion(rows);
 }
 
@@ -550,8 +556,11 @@ function runConciliacion(){
   }
 
   const mappingAlmacenes = buildMappingFromSelectedTiendas(dest);
+
+  // solo tiendas seleccionadas
   const tiendasFiltradas = state.tiendas.filter(r => mappingAlmacenes[String(r.tienda).trim()] !== undefined);
 
+  // velneo solo del almacén destino
   const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
 
   const res = generarConciliacion({
@@ -565,11 +574,9 @@ function runConciliacion(){
 }
 
 function applyPreset(destAlmacen, tiendasList){
-  // set almacén destino
   const sel = $("cAlmacenDestino");
   if (sel) sel.value = String(destAlmacen);
 
-  // marcar solo esas tiendas
   const wanted = new Set(tiendasList.map(String));
   document.querySelectorAll("#cTiendaList input[type=checkbox]").forEach(cb=>{
     cb.checked = wanted.has(String(cb.value));
@@ -646,7 +653,7 @@ function setupUI(){
       .sort((a,b)=>a.localeCompare(b,"es"));
     fillConcAlmacenDestinoOptions(almacenesVelneo);
 
-    $("cMeta").textContent = `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`;
+    setText("cMeta", `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`);
   });
 
   // Conciliación: cargar Tiendas (varios)
@@ -657,7 +664,7 @@ function setupUI(){
       state.tiendas.push(...parseTiendasCSV(await f.text()));
     }
     fillConcTiendasChecklistFromData();
-    $("cMeta").textContent = `Tiendas cargadas: ${state.tiendas.length} filas | Tiendas detectadas: ${state.concTiendasList.join(", ")}`;
+    setText("cMeta", `Tiendas cargadas: ${state.tiendas.length} filas | Tiendas: ${state.concTiendasList.join(", ")}`);
   });
 
   // Conciliación: filtros vista
@@ -665,23 +672,17 @@ function setupUI(){
   $("cSoloDif")?.addEventListener("change", applyConciliacionViewFilters);
 
   // Tiendas checklist
-  $("cTiendaSearch")?.addEventListener("input", ()=>{
-    applySearchToChecklist("cTiendaSearch","cTiendaList");
-  });
-  $("cTiendaList")?.addEventListener("change", ()=>{ /* no recalcula, solo afecta al próximo conciliar */ });
-  $("cTiendaAll")?.addEventListener("click", ()=>{ setAll("cTiendaList", true); });
-  $("cTiendaNone")?.addEventListener("click", ()=>{ setAll("cTiendaList", false); });
+  $("cTiendaSearch")?.addEventListener("input", ()=> applySearchToChecklist("cTiendaSearch","cTiendaList"));
+  $("cTiendaAll")?.addEventListener("click", ()=> setAll("cTiendaList", true));
+  $("cTiendaNone")?.addEventListener("click", ()=> setAll("cTiendaList", false));
 
-  // Presets
-  $("btnPreset34")?.addEventListener("click", ()=>{
-    applyPreset("34", ["3","4","7"]);
-  });
-  $("btnPreset1")?.addEventListener("click", ()=>{
-    applyPreset("1", ["1"]);
-  });
+  // Presets (IDs correctos del HTML)
+  $("cPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7"]));
+  $("cPreset11")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
 
   // Conciliar
   $("btnConciliar")?.addEventListener("click", runConciliacion);
 }
 
-setupUI();
+// IMPORTANTE: esperar al DOM
+document.addEventListener("DOMContentLoaded", setupUI);
