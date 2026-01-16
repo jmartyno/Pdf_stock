@@ -408,6 +408,32 @@ function setupUI(){
       alert(err?.message ?? String(err));
     }
   });
+function parseVelneoCSV(text){
+  const rows = parseCSV(text);
+  return rows.map(r=>({
+    EAN: r.EAN || r.ean,
+    Concepto: r.Concepto,
+    Descripcion: r.Descripcion,
+    Talla: r.Talla,
+    StockNuevo: r.StockNuevo,
+    StockUsado: r.StockUsado,
+    Almacen: r.Almacen
+  }));
+}
+
+function parseTiendasCSV(text){
+  const lines = text.replace(/\r\n/g,"\n").split("\n").slice(1);
+  return lines.filter(l=>l.trim()).map(l=>{
+    const [fecha,sesion,tienda,uso,concepto,descripcion,talla,unidades,ean] = l.split(";");
+    return {
+      ean: ean,
+      talla: talla,
+      uso: uso,
+      unidades: Number(unidades),
+      tienda: tienda
+    };
+  });
+}
 
   ["qNombre","fGrupo","fAlmacen","hideZeros","hideEmptyRows"].forEach(id=>{
     $(id).addEventListener("input", applyFilters);
@@ -429,4 +455,5 @@ function setupUI(){
 }
 
 setupUI();
+
 
