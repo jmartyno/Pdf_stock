@@ -102,6 +102,54 @@
           <button id="btnConciliar" class="btn">Conciliar</button>
         </div>
       </div>
+
+      <!-- NUEVO: filtros conciliación -->
+      <div class="row" style="margin-top:10px;">
+        <div class="field">
+          <div class="lbl">Buscar (Concepto / Descripción)</div>
+          <input id="cQ" type="text" placeholder="Ej: 100 / CHQ C 999" />
+        </div>
+
+        <div class="field">
+          <div class="lbl">Grupo (Velneo)</div>
+          <input id="cGrupoSearch" type="text" placeholder="Buscar grupo (ej: CHQ)" />
+          <div class="miniBtns">
+            <button id="cGrupoAll" type="button" class="btn secondary">Todos</button>
+            <button id="cGrupoNone" type="button" class="btn secondary">Ninguno</button>
+          </div>
+          <div id="cGrupoList" class="checklist"></div>
+        </div>
+
+        <div class="field">
+          <div class="lbl">Almacén (Velneo)</div>
+          <input id="cAlmSearch" type="text" placeholder="Buscar almacén (ej: 34)" />
+          <div class="miniBtns">
+            <button id="cAlmAll" type="button" class="btn secondary">Todos</button>
+            <button id="cAlmNone" type="button" class="btn secondary">Ninguno</button>
+          </div>
+          <div id="cAlmList" class="checklist"></div>
+        </div>
+
+        <div class="field">
+          <div class="lbl">Tienda (CSV)</div>
+          <input id="cTiendaSearch" type="text" placeholder="Buscar tienda (ej: Ayala)" />
+          <div class="miniBtns">
+            <button id="cTiendaAll" type="button" class="btn secondary">Todas</button>
+            <button id="cTiendaNone" type="button" class="btn secondary">Ninguna</button>
+          </div>
+          <div id="cTiendaList" class="checklist"></div>
+        </div>
+
+        <div class="field">
+          <div class="lbl">Solo diferencias</div>
+          <label class="chk"><input id="cSoloDif" type="checkbox" checked /> Sí</label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div id="cMeta" class="meta"></div>
+      </div>
+      <!-- /NUEVO -->
     </section>
 
     <section>
