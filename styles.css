@@ -73,7 +73,7 @@ input[type="text"], select{
 h2{ margin:14px 0 10px; font-size:16px; }
 
 .tableWrap{
-  overflow:auto;
+  overflow-x:auto;
   border:1px solid var(--border);
   border-radius:12px;
   background:#fff;
@@ -130,3 +130,4 @@ tr.alt td{ background:#fbfcfd; }
   th{ position:static; }
   body{ background:#fff; }
 }
+
