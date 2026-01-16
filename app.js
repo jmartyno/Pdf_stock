@@ -469,15 +469,15 @@ function applyFilters(){
 // ====== Conciliación helpers ======
 
 function parseVelneoCSV(text){
-  // Reutiliza parseCSV: ya trae Nombre/Grupo/Talla/Stocks/Almacén y EAN (si existe)
-  return parseCSV(text).map(r=>({
-    ean: r.EAN || "",
-    nombre: r.Nombre || "",
-    grupo: r.Grupo || "",
-    talla: r.Talla || "",
-    stockNuevo: Number(r.StockNuevo) || 0,
-    stockUsado: Number(r.StockUsado) || 0,
-    almacen: String(r.Almacen || "")
+  const rows = parseCSV(text);
+  return rows.map(r=>({
+    EAN: r["Talla -> Código de barras"] || r["Talla -> C�digo de barras"] || r.EAN || r.ean,
+    Concepto: r.Concepto,
+    Descripcion: r.Descripcion,
+    Talla: r.Talla,
+    StockNuevo: r.StockNuevo,
+    StockUsado: r.StockUsado,
+    Almacen: r.Almacen
   }));
 }
 
@@ -669,4 +669,5 @@ function setupUI(){
 }
 
 setupUI();
+
 
