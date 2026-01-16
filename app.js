@@ -1,5 +1,4 @@
 // Stock por tallas: CSV local -> pivot con tallas en columnas + filtros + print
-
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -7,9 +6,8 @@ const state = {
   tallas: [],
   grupos: [],
   almacenes: [],
-  state.velneo = [];
-  state.tiendas = [];
-
+  velneo: [],
+  tiendas: []
 };
 
 function normalizeKey(s){
@@ -42,7 +40,6 @@ function sortTallas(list){
 }
 
 function parseCSV(text){
-  // Simple parser for ; separated CSV with optional quotes
   const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(l => l.trim().length>0);
   if (!lines.length) return [];
 
@@ -121,7 +118,6 @@ function fillSelect(selectEl, values){
 }
 
 function buildPivot(rows){
-  // key: Nombre|Grupo|Almacen
   const map = new Map();
   const tallas = sortTallas(rows.map(r => r.Talla));
 
@@ -152,9 +148,34 @@ function rowTotal(mapTalla){
 
 function fmtCell(v, hideZeros){
   if (hideZeros && (!v || v === 0)) return "";
-  // enteros sin decimales
   if (Number.isInteger(v)) return String(v);
   return String(v);
+}
+
+function tdLeft(text, muted=false){
+  const td=document.createElement("td");
+  td.textContent = text;
+  td.classList.add("left");
+  if (muted) td.classList.add("muted");
+  return td;
+}
+function tdCenter(text, muted=false){
+  const td=document.createElement("td");
+  td.textContent = text;
+  if (muted) td.classList.add("muted");
+  return td;
+}
+function tdTipo(text){
+  const td=document.createElement("td");
+  td.textContent = text;
+  td.classList.add("tipo");
+  return td;
+}
+function tdTotal(text){
+  const td=document.createElement("td");
+  td.textContent = text;
+  td.classList.add("total");
+  return td;
 }
 
 function makeTablePivot(pivot, opts){
@@ -186,13 +207,11 @@ function makeTablePivot(pivot, opts){
     const hasN = totalN !== 0;
     const hasU = totalU !== 0;
 
-    // si hideEmptyRows, no pintamos líneas con total 0
     const paintN = hideEmptyRows ? hasN : true;
     const paintU = hideEmptyRows ? hasU : true;
 
     if (!paintN && !paintU) continue;
 
-    // Nuevo
     if (paintN){
       const tr = document.createElement("tr");
       if (alt) tr.classList.add("alt");
@@ -208,7 +227,6 @@ function makeTablePivot(pivot, opts){
       tbody.appendChild(tr);
     }
 
-    // Usado (segunda línea con nombre/grupo/almacén vacíos)
     if (paintU){
       const tr = document.createElement("tr");
       if (alt) tr.classList.add("alt");
@@ -231,36 +249,9 @@ function makeTablePivot(pivot, opts){
   return table;
 }
 
-function tdLeft(text, muted=false){
-  const td=document.createElement("td");
-  td.textContent = text;
-  td.classList.add("left");
-  if (muted) td.classList.add("muted");
-  return td;
-}
-function tdCenter(text, muted=false){
-  const td=document.createElement("td");
-  td.textContent = text;
-  if (muted) td.classList.add("muted");
-  return td;
-}
-function tdTipo(text){
-  const td=document.createElement("td");
-  td.textContent = text;
-  td.classList.add("tipo");
-  return td;
-}
-function tdTotal(text){
-  const td=document.createElement("td");
-  td.textContent = text;
-  td.classList.add("total");
-  return td;
-}
-
 function makeSummary(rows, opts){
   const { hideZeros } = opts;
 
-  // Totales por (Nombre,Grupo,Almacen)
   const map = new Map();
   for (const r of rows){
     const key = `${r.Nombre}||${r.Grupo}||${r.Almacen}`;
@@ -323,7 +314,6 @@ function makeSummary(rows, opts){
     alt=!alt;
   }
 
-  // Totales finales
   const trSep=document.createElement("tr");
   trSep.appendChild(tdLeft(""));
   trSep.appendChild(tdLeft(""));
@@ -371,12 +361,10 @@ function applyFilters(){
 
   const pivot = buildPivot(filtered);
 
-  // render pivot
   const wrap = $("tableWrap");
   wrap.innerHTML = "";
   wrap.appendChild(makeTablePivot(pivot, opts));
 
-  // render summary
   const sw = $("summaryWrap");
   sw.innerHTML = "";
   sw.appendChild(makeSummary(filtered, opts));
@@ -384,56 +372,8 @@ function applyFilters(){
   $("meta").textContent = `Filas: ${filtered.length} | Artículos: ${pivot.items.length} | Tallas: ${pivot.tallas.length}`;
 }
 
-function setupUI(){
-  $("file").addEventListener("change", async (e)=>{
-    const f = e.target.files?.[0];
-    if (!f) return;
-$("fileVelneo").addEventListener("change", async e=>{
-  const f = e.target.files[0];
-  if(!f) return;
-  state.velneo = parseVelneoCSV(await f.text());
-});
+// ====== Conciliación helpers ======
 
-$("fileTiendas").addEventListener("change", async e=>{
-  state.tiendas = [];
-  for(const f of e.target.files){
-    state.tiendas.push(...parseTiendasCSV(await f.text()));
-  }
-});
-
-$("btnConciliar").addEventListener("click", ()=>{
-  const resultado = generarConciliacion({
-    velneoRows: state.velneo,
-    tiendasRows: state.tiendas,
-    mappingAlmacenes: {
-      "Ayala":"34",
-      "3":"34",
-      "4":"34",
-      "7":"34"
-    }
-  });
-  renderTablaConciliacion(resultado);
-});
-
-    // read as text (browser handles encodings fairly well; latin1/utf-8 depends on file)
-    const text = await f.text();
-
-    try{
-      const rows = parseCSV(text);
-      state.rows = rows;
-
-      state.grupos = [...new Set(rows.map(r=>r.Grupo))].sort((a,b)=>a.localeCompare(b,"es"));
-      state.almacenes = [...new Set(rows.map(r=>String(r.Almacen)))].sort((a,b)=>a.localeCompare(b,"es"));
-
-      fillSelect($("fGrupo"), state.grupos);
-      fillSelect($("fAlmacen"), state.almacenes);
-
-      $("meta").textContent = `Archivo: ${f.name} | Filas: ${rows.length}`;
-      applyFilters();
-    }catch(err){
-      alert(err?.message ?? String(err));
-    }
-  });
 function parseVelneoCSV(text){
   const rows = parseCSV(text);
   return rows.map(r=>({
@@ -448,23 +388,26 @@ function parseVelneoCSV(text){
 }
 
 function parseTiendasCSV(text){
-  const lines = text.replace(/\r\n/g,"\n").split("\n").slice(1);
+  const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").slice(1);
   return lines.filter(l=>l.trim()).map(l=>{
     const [fecha,sesion,tienda,uso,concepto,descripcion,talla,unidades,ean] = l.split(";");
     return {
-      ean: ean,
-      talla: talla,
-      uso: uso,
-      unidades: Number(unidades),
-      tienda: tienda
+      ean: (ean ?? "").trim(),
+      talla: (talla ?? "").trim(),
+      uso: (uso ?? "").trim(),
+      unidades: toNumber(unidades),
+      tienda: (tienda ?? "").trim()
     };
   });
 }
+
 function renderTablaConciliacion(rows){
   const wrap = $("conciliacionWrap");
+  if (!wrap) return;
+
   wrap.innerHTML = "";
 
-  if(!rows.length){
+  if(!rows || !rows.length){
     wrap.textContent = "Sin diferencias.";
     return;
   }
@@ -488,7 +431,7 @@ function renderTablaConciliacion(rows){
     const tr=document.createElement("tr");
     ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(k=>{
       const td=document.createElement("td");
-      td.textContent = r[k];
+      td.textContent = r[k] ?? "";
       tr.appendChild(td);
     });
     tbody.appendChild(tr);
@@ -498,12 +441,73 @@ function renderTablaConciliacion(rows){
   wrap.appendChild(table);
 }
 
-  ["qNombre","fGrupo","fAlmacen","hideZeros","hideEmptyRows"].forEach(id=>{
-    $(id).addEventListener("input", applyFilters);
-    $(id).addEventListener("change", applyFilters);
+function setupUI(){
+  // 1) Cargar CSV base (visualización pivot)
+  $("file")?.addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if (!f) return;
+
+    const text = await f.text();
+
+    try{
+      const rows = parseCSV(text);
+      state.rows = rows;
+
+      state.grupos = [...new Set(rows.map(r=>r.Grupo))].sort((a,b)=>a.localeCompare(b,"es"));
+      state.almacenes = [...new Set(rows.map(r=>String(r.Almacen)))].sort((a,b)=>a.localeCompare(b,"es"));
+
+      fillSelect($("fGrupo"), state.grupos);
+      fillSelect($("fAlmacen"), state.almacenes);
+
+      $("meta").textContent = `Archivo: ${f.name} | Filas: ${rows.length}`;
+      applyFilters();
+    }catch(err){
+      alert(err?.message ?? String(err));
+    }
   });
 
-  $("btnReset").addEventListener("click", ()=>{
+  // 2) Conciliación: cargar Velneo
+  $("fileVelneo")?.addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
+    state.velneo = parseVelneoCSV(await f.text());
+  });
+
+  // 3) Conciliación: cargar Tiendas (varios)
+  $("fileTiendas")?.addEventListener("change", async (e)=>{
+    state.tiendas = [];
+    const files = Array.from(e.target.files || []);
+    for(const f of files){
+      state.tiendas.push(...parseTiendasCSV(await f.text()));
+    }
+  });
+
+  // 4) Conciliar
+  $("btnConciliar")?.addEventListener("click", ()=>{
+    if (typeof generarConciliacion !== "function"){
+      alert("Falta cargar conciliacion.js antes que app.js");
+      return;
+    }
+    const resultado = generarConciliacion({
+      velneoRows: state.velneo,
+      tiendasRows: state.tiendas,
+      mappingAlmacenes: {
+        "Ayala":"34",
+        "3":"34",
+        "4":"34",
+        "7":"34"
+      }
+    });
+    renderTablaConciliacion(resultado);
+  });
+
+  // filtros pivot
+  ["qNombre","fGrupo","fAlmacen","hideZeros","hideEmptyRows"].forEach(id=>{
+    $(id)?.addEventListener("input", applyFilters);
+    $(id)?.addEventListener("change", applyFilters);
+  });
+
+  $("btnReset")?.addEventListener("click", ()=>{
     $("qNombre").value="";
     $("fGrupo").value="";
     $("fAlmacen").value="";
@@ -512,13 +516,7 @@ function renderTablaConciliacion(rows){
     applyFilters();
   });
 
-  $("btnPrint").addEventListener("click", ()=>{
-    window.print();
-  });
+  $("btnPrint")?.addEventListener("click", ()=> window.print());
 }
 
 setupUI();
-
-
-
-
