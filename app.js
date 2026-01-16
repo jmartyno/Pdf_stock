@@ -94,6 +94,15 @@ function parseCSV(text){
   const iUsado  = pickIdx("Stock Alquiler", "Stock Usado", "Usado");
   const iAlm    = pickIdx("Almacén", "Almacen", "Almac�n");
 
+  // opcional: EAN / código barras
+  const iEan = pickIdx(
+    "Talla -> Código de barras",
+    "Talla -> C�digo de barras",
+    "EAN",
+    "Codigo de barras",
+    "Código de barras"
+  );
+
   const need = {iNombre,iGrupo,iTalla,iNuevo,iUsado,iAlm};
   if (Object.values(need).some(v => v < 0)){
     throw new Error("El CSV no tiene las columnas necesarias: Nombre, Grupo, Talla, Stock Nuevo, Stock Alquiler/Usado, Almacén.");
@@ -109,6 +118,7 @@ function parseCSV(text){
       StockNuevo: toNumber(cols[iNuevo]),
       StockUsado: toNumber(cols[iUsado]),
       Almacen: cols[iAlm] ?? "",
+      EAN: iEan >= 0 ? String(cols[iEan] ?? "").trim() : ""
     });
   }
   return rows;
@@ -264,7 +274,6 @@ function makeTablePivot(pivot, opts){
     const totalN = rowTotal(it.byTallaNuevo);
     const totalU = rowTotal(it.byTallaUsado);
 
-    // robusto: mira las tallas del pivot
     const hasN = tallas.some(t => (Number(it.byTallaNuevo.get(t)) || 0) !== 0);
     const hasU = tallas.some(t => (Number(it.byTallaUsado.get(t)) || 0) !== 0);
 
@@ -455,20 +464,20 @@ function applyFilters(){
   sw.appendChild(makeSummary(filtered, opts));
 
   $("meta").textContent = `Filas: ${filtered.length} | Artículos: ${pivot.items.length} | Tallas: ${pivot.tallas.length}`;
-}
+} // <-- IMPORTANTE: cerramos applyFilters()
 
 // ====== Conciliación helpers ======
 
 function parseVelneoCSV(text){
-  const rows = parseCSV(text);
-  return rows.map(r=>({
-    EAN: r.EAN || r.ean,
-    Concepto: r.Concepto,
-    Descripcion: r.Descripcion,
-    Talla: r.Talla,
-    StockNuevo: r.StockNuevo,
-    StockUsado: r.StockUsado,
-    Almacen: r.Almacen
+  // Reutiliza parseCSV: ya trae Nombre/Grupo/Talla/Stocks/Almacén y EAN (si existe)
+  return parseCSV(text).map(r=>({
+    ean: r.EAN || "",
+    nombre: r.Nombre || "",
+    grupo: r.Grupo || "",
+    talla: r.Talla || "",
+    stockNuevo: Number(r.StockNuevo) || 0,
+    stockUsado: Number(r.StockUsado) || 0,
+    almacen: String(r.Almacen || "")
   }));
 }
 
@@ -481,7 +490,9 @@ function parseTiendasCSV(text){
       talla: (talla ?? "").trim(),
       uso: (uso ?? "").trim(),
       unidades: toNumber(unidades),
-      tienda: (tienda ?? "").trim()
+      tienda: (tienda ?? "").trim(),
+      concepto: (concepto ?? "").trim(),
+      descripcion: (descripcion ?? "").trim()
     };
   });
 }
@@ -523,7 +534,7 @@ function renderTablaConciliacion(rows){
   });
 
   table.appendChild(tbody);
-  wrap.appendChild(table);
+  wrap.appendChild(table); // <-- IMPORTANTE: se estaba olvidando
 }
 
 function setupUI(){
@@ -646,5 +657,3 @@ function setupUI(){
 }
 
 setupUI();
-
-
