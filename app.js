@@ -142,7 +142,7 @@ function buildPivot(rows){
 
 function rowTotal(mapTalla){
   let t = 0;
-  for (const v of mapTalla.values()) t += v;
+  for (const v of mapTalla.values()) t += Number(v) || 0;
   return t;
 }
 
@@ -204,8 +204,10 @@ function makeTablePivot(pivot, opts){
     const totalN = rowTotal(it.byTallaNuevo);
     const totalU = rowTotal(it.byTallaUsado);
 
-    const hasN = totalN !== 0;
-    const hasU = totalU !== 0;
+// ¿Hay alguna talla con valor NO 0?
+    const hasN = Array.from(it.byTallaNuevo.values()).some(v => Number(v) !== 0);
+    const hasU = Array.from(it.byTallaUsado.values()).some(v => Number(v) !== 0);
+
 
     const paintN = hideEmptyRows ? hasN : true;
     const paintU = hideEmptyRows ? hasU : true;
@@ -520,3 +522,4 @@ function setupUI(){
 }
 
 setupUI();
+
