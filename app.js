@@ -388,6 +388,32 @@ function setupUI(){
   $("file").addEventListener("change", async (e)=>{
     const f = e.target.files?.[0];
     if (!f) return;
+$("fileVelneo").addEventListener("change", async e=>{
+  const f = e.target.files[0];
+  if(!f) return;
+  state.velneo = parseVelneoCSV(await f.text());
+});
+
+$("fileTiendas").addEventListener("change", async e=>{
+  state.tiendas = [];
+  for(const f of e.target.files){
+    state.tiendas.push(...parseTiendasCSV(await f.text()));
+  }
+});
+
+$("btnConciliar").addEventListener("click", ()=>{
+  const resultado = generarConciliacion({
+    velneoRows: state.velneo,
+    tiendasRows: state.tiendas,
+    mappingAlmacenes: {
+      "Ayala":"34",
+      "3":"34",
+      "4":"34",
+      "7":"34"
+    }
+  });
+  renderTablaConciliacion(resultado);
+});
 
     // read as text (browser handles encodings fairly well; latin1/utf-8 depends on file)
     const text = await f.text();
@@ -492,6 +518,7 @@ function renderTablaConciliacion(rows){
 }
 
 setupUI();
+
 
 
 
