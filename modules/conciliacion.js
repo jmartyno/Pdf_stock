@@ -4,10 +4,30 @@
 
 (function(){
 
-  function norm(v){ return String(v ?? "").trim(); }
+  function norm(v){
+    return String(v ?? "")
+      .replace(/\uFEFF/g, "")      // BOM
+      .trim()
+      .replace(/^"|"$/g, "");      // comillas externas
+  }
+
+  function normUpper(v){ return norm(v).toUpperCase(); }
+
+  function normEAN(v){
+    // deja solo dígitos si viene limpio, pero sin romper ean raros
+    const s = norm(v);
+    if (!s) return "";
+    const digits = s.replace(/\s+/g, "");
+    return digits;
+  }
+
+  function normTalla(v){
+    const t = norm(v);
+    return t ? t : "(SIN TALLA)";
+  }
 
   function key(ean, talla, almacen){
-    return `${norm(ean)}||${norm(talla)}||${norm(almacen)}`;
+    return `${normEAN(ean)}||${normTalla(talla)}||${norm(almacen)}`;
   }
 
   function add(map, k, field, val){
@@ -31,14 +51,14 @@
 
     // 1) Velneo -> Map por (EAN,talla,almacen) con nuevo/usado
     const velneo = new Map();
-    const metaByEAN = new Map(); // {concepto, descripcion}
+    const metaByEAN = new Map(); // ean -> {concepto, descripcion}
 
-    velneoRows.forEach(r=>{
-      const ean = norm(r.EAN);
+    (velneoRows || []).forEach(r=>{
+      const ean = normEAN(r.EAN);
       if (!ean) return;
 
       const almacen = norm(r.Almacen);
-      const talla = norm(r.Talla);
+      const talla = normTalla(r.Talla);
 
       const k = key(ean, talla, almacen);
 
@@ -56,25 +76,32 @@
     // 2) Tiendas -> Map por (EAN,talla,almacenDestino) con nuevo/usado
     const tiendas = new Map();
 
-    tiendasRows.forEach(r=>{
+    (tiendasRows || []).forEach(r=>{
       const tienda = norm(r.tienda);
-      const almacenDestino = mappingAlmacenes[tienda];
+      const almacenDestino = mappingAlmacenes ? mappingAlmacenes[tienda] : null;
       if(!almacenDestino) return;
 
-      const ean = norm(r.ean);
+      const ean = normEAN(r.ean);
       if (!ean) return;
 
-      const talla = norm(r.talla);
+      const talla = normTalla(r.talla);
       const k = key(ean, talla, almacenDestino);
 
-      const uso = norm(r.uso).toUpperCase();
+      const uso = normUpper(r.uso);
       const field = (uso === "NUEVO") ? "nuevo" : "usado";
 
       add(tiendas, k, field, r.unidades);
+
+      // si no existe en velneo, crea meta “dummy” para que salga en resultado
+      if(!metaByEAN.has(ean)){
+        metaByEAN.set(ean, {
+          concepto: "(SIN VELNEO)",
+          descripcion: `EAN: ${ean}`
+        });
+      }
     });
 
     // 3) Agregación final por (EAN, almacenDestino, uso) con tallas en mapa
-    //    y sacamos 3 filas: Velneo / CSV / Dif
     const group = new Map(); // gkey -> {meta, uso, almacen, V:MapTalla, T:MapTalla, D:MapTalla}
 
     function gkey(ean, almacen, uso){
@@ -85,8 +112,8 @@
 
     allKeys.forEach(k=>{
       const [ean, talla, almacen] = k.split("||");
-      const m = metaByEAN.get(ean);
-      if(!m) return; // si no existe en Velneo, no podemos poner concepto/desc
+
+      const m = metaByEAN.get(ean) || { concepto:"(SIN META)", descripcion:`EAN: ${ean}` };
 
       const v = velneo.get(k) || {nuevo:0, usado:0};
       const t = tiendas.get(k) || {nuevo:0, usado:0};
@@ -164,7 +191,7 @@
       }
     }
 
-    // Orden: Concepto/Desc/uso y que Dif quede visible
+    // Orden: Concepto/Desc/uso y que Dif quede arriba
     resultado.sort((a,b)=>{
       const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
       const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
