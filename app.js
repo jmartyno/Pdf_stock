@@ -612,23 +612,35 @@ function setupUI(){
   });
 
   // 4) Conciliar
-  $("btnConciliar")?.addEventListener("click", ()=>{
-    if (typeof generarConciliacion !== "function"){
-      alert("Falta cargar conciliacion.js antes que app.js");
-      return;
+ $("btnConciliar")?.addEventListener("click", ()=>{
+  if (typeof generarConciliacion !== "function"){
+    alert("Falta cargar modules/conciliacion.js antes que app.js");
+    return;
+  }
+  if (!state.velneo.length) { alert("No has cargado CSV Velneo (o está vacío)."); return; }
+  if (!state.tiendas.length) { alert("No has cargado CSV Tiendas (o está vacío)."); return; }
+
+  const resultado = generarConciliacion({
+    velneoRows: state.velneo,
+    tiendasRows: state.tiendas,
+    mappingAlmacenes: {
+      "Ayala":"34",
+      "3":"34",
+      "4":"34",
+      "7":"34"
     }
-    const resultado = generarConciliacion({
-      velneoRows: state.velneo,
-      tiendasRows: state.tiendas,
-      mappingAlmacenes: {
-        "Ayala":"34",
-        "3":"34",
-        "4":"34",
-        "7":"34"
-      }
-    });
-    renderTablaConciliacion(resultado);
   });
+
+  // si no hay filas, mostramos un mensaje útil
+  const meta = resultado._meta || {};
+  if (!resultado.length){
+    const wrap = $("conciliacionWrap");
+    wrap.textContent = `Sin diferencias. Comparados: ${meta.comparados ?? "?"} | Keys Velneo: ${meta.velneo ?? "?"} | Keys Tiendas: ${meta.tiendas ?? "?"}`;
+    return;
+  }
+
+  renderTablaConciliacion(resultado);
+});
 
   // filtros pivot
   ["qNombre","hideZeros","hideEmptyRows"].forEach(id=>{
@@ -657,3 +669,4 @@ function setupUI(){
 }
 
 setupUI();
+
