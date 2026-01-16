@@ -114,6 +114,7 @@ function parseCSV(text){
   return rows;
 }
 
+/* ====== Grupo checklist ====== */
 function fillGrupoChecklist(groups){
   const box = $("fGrupoList");
   if (!box) return;
@@ -132,8 +133,8 @@ function fillGrupoChecklist(groups){
 }
 
 function getSelectedGrupos(){
-  const els = document.querySelectorAll("#fGrupoList input:checked");
-  return Array.from(els).map(cb => cb.value);
+  return Array.from(document.querySelectorAll("#fGrupoList input:checked"))
+    .map(cb => cb.value);
 }
 
 function applyGrupoSearch(){
@@ -144,6 +145,7 @@ function applyGrupoSearch(){
   });
 }
 
+/* ====== Almacén checklist ====== */
 function fillAlmacenChecklist(almacenes){
   const box = $("fAlmacenList");
   if (!box) return;
@@ -174,6 +176,7 @@ function applyAlmacenSearch(){
   });
 }
 
+/* ====== Pivot ====== */
 function buildPivot(rows){
   const map = new Map();
   const tallas = sortTallas(rows.map(r => r.Talla));
@@ -400,6 +403,12 @@ function makeSummary(rows, opts){
   return table;
 }
 
+function renderVacio(){
+  $("tableWrap").innerHTML = "";
+  $("summaryWrap").innerHTML = "";
+  $("meta").textContent = "Filas: 0 | Artículos: 0 | Tallas: 0";
+}
+
 function applyFilters(){
   const q = $("qNombre").value.trim().toLowerCase();
 
@@ -410,6 +419,13 @@ function applyFilters(){
   // Almacén tipo Excel
   const aSel = getSelectedAlmacenes();
   const aTxt = ($("fAlmacenSearch")?.value || "").trim().toLowerCase();
+
+  // Si hay checklist y no hay nada marcado => no mostrar nada
+  const totalGrupos = document.querySelectorAll("#fGrupoList input").length;
+  const totalAlm    = document.querySelectorAll("#fAlmacenList input").length;
+
+  if (totalGrupos > 0 && gruposSel.length === 0) { renderVacio(); return; }
+  if (totalAlm > 0 && aSel.length === 0) { renderVacio(); return; }
 
   const filtered = state.rows.filter(r=>{
     if (q && !String(r.Nombre).toLowerCase().includes(q)) return false;
@@ -630,3 +646,5 @@ function setupUI(){
 }
 
 setupUI();
+
+
