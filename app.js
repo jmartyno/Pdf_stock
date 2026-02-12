@@ -18,9 +18,14 @@ function setText(id, txt){
 }
 
 function normalizeKey(s){
-  return String(s ?? "").trim().toLowerCase()
+  return String(s ?? "")
+    .replace(/\uFEFF/g, "")          // quita BOM
+    .trim()
+    .toLowerCase()
     .replaceAll("á","a").replaceAll("é","e").replaceAll("í","i").replaceAll("ó","o").replaceAll("ú","u")
-    .replaceAll("ñ","n");
+    .replaceAll("ñ","n")
+    .replaceAll("�","")              // quita carácter raro
+    .replace(/[^a-z0-9]+/g, "");     // quita espacios, flechas, etc.
 }
 
 function toNumber(v){
@@ -762,4 +767,5 @@ $("fileVelneo")?.addEventListener("change", async (e)=>{
 
 // IMPORTANTE: esperar al DOM
 document.addEventListener("DOMContentLoaded", setupUI);
+
 
