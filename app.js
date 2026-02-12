@@ -466,18 +466,31 @@ function parseVelneoCSV(text){
     return -1;
   };
 
-  const iConcepto = pickIdx("Concepto");
-  const iDesc     = pickIdx("Descripcion", "Descripción", "Concepto -> Descripción", "Concepto -> Descripci�n");
-  const iTalla     = pickIdx("Talla");
-  const iEAN       = pickIdx("EAN", "Talla -> Código de barras", "Talla -> C�digo de barras");
-  const iNuevo     = pickIdx("Stock Nuevo");
-  const iAlq       = pickIdx("Stock Alquiler", "Stock Usado");
-  const iAlm       = pickIdx("Almacén", "Almacen", "Almac�n");
+ const iConcepto = pickIdx("Concepto"); // opcional
+const iDesc     = pickIdx(
+  "Descripcion","Descripción",
+  "Concepto -> Descripción","Concepto -> Descripci�n",
+  "Concepto -> Descripcion","Concepto -> Descripcio�n"
+); // opcional
 
-  const need = {iConcepto,iDesc,iTalla,iEAN,iNuevo,iAlq,iAlm};
-  if (Object.values(need).some(v => v < 0)){
-    throw new Error("CSV Velneo: faltan columnas. Necesito Concepto, Descripción, Talla, EAN, Stock Nuevo, Stock Alquiler, Almacén.");
-  }
+const iTalla = pickIdx("Talla");
+
+const iEAN = pickIdx(
+  "EAN","ean",
+  "Talla -> Código de barras","Talla -> Codigo de barras",
+  "Talla -> C�digo de barras","Talla -> C�digo de barras"
+);
+
+const iNuevo = pickIdx("Stock Nuevo");
+const iAlq   = pickIdx("Stock Alquiler", "Stock Usado");
+const iAlm   = pickIdx("Almacén", "Almacen", "Almac�n");
+
+// SOLO exigimos lo imprescindible
+const need = {iTalla,iEAN,iNuevo,iAlq,iAlm};
+if (Object.values(need).some(v => v < 0)){
+  throw new Error("CSV Velneo: faltan columnas. Necesito Talla, EAN, Stock Nuevo, Stock Alquiler y Almacén.");
+}
+
 
   const out = [];
   for (let li=1; li<lines.length; li++){
@@ -796,6 +809,7 @@ $("fileVelneo")?.addEventListener("change", async (e)=>{
 
 // IMPORTANTE: esperar al DOM
 setupUI();
+
 
 
 
