@@ -71,10 +71,10 @@
       const uso = norm(r.uso).toUpperCase();
       const field = (uso === "NUEVO") ? "nuevo" : "usado";
 
-      const tienda = norm(r.tienda);
-
+      const tienda = norm(r.tienda).toLowerCase();
       const mapUso = getMapping(mappingAlmacenes, field);
       const almacenDestino = mapUso[tienda];
+
       if(!almacenDestino) return;
 
       const ean = norm(r.ean);
