@@ -422,16 +422,83 @@ function applyFilters(){
 /* ====== Conciliación ====== */
 
 function parseVelneoCSV(text){
-  const rows = parseCSV(text);
-  return rows.map(r=>({
-    EAN: String(r.EAN || r.ean || "").trim(),
-    Concepto: String(r.Concepto ?? r.Nombre ?? "").trim(),
-    Descripcion: String(r.Descripcion ?? r.Grupo ?? "").trim(),
-    Talla: String(r.Talla ?? "").trim(),
-    StockNuevo: toNumber(r.StockNuevo),
-    StockUsado: toNumber(r.StockUsado),
-    Almacen: String(r.Almacen ?? "").trim()
-  }));
+  // Parser específico para export Velneo (no usa parseCSV del pivot)
+  const lines = text
+    .replace(/\r\n/g,"\n").replace(/\r/g,"\n")
+    .split("\n")
+    .filter(l => l.trim().length > 0);
+
+  if (!lines.length) return [];
+
+  const parseLine = (line) => {
+    const out = [];
+    let cur = "";
+    let inQ = false;
+    for (let i=0;i<line.length;i++){
+      const ch = line[i];
+      if (ch === '"'){
+        if (inQ && line[i+1] === '"'){ cur += '"'; i++; }
+        else inQ = !inQ;
+      } else if (ch === ";" && !inQ){
+        out.push(cur); cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out.map(x => x.trim().replace(/^"|"$/g,""));
+  };
+
+  const header = parseLine(lines[0]).map(h => h.trim());
+  const idx = new Map();
+  header.forEach((h,i)=> idx.set(normalizeKey(h), i));
+
+  const pickIdx = (...names) => {
+    for (const n of names){
+      const k = normalizeKey(n);
+      if (idx.has(k)) return idx.get(k);
+    }
+    return -1;
+  };
+
+  const iConcepto = pickIdx("Concepto");
+  const iDesc     = pickIdx("Descripcion", "Descripción", "Concepto -> Descripción", "Concepto -> Descripci�n");
+  const iTalla     = pickIdx("Talla");
+  const iEAN       = pickIdx("EAN", "Talla -> Código de barras", "Talla -> C�digo de barras");
+  const iNuevo     = pickIdx("Stock Nuevo");
+  const iAlq       = pickIdx("Stock Alquiler", "Stock Usado");
+  const iAlm       = pickIdx("Almacén", "Almacen", "Almac�n");
+
+  const need = {iConcepto,iDesc,iTalla,iEAN,iNuevo,iAlq,iAlm};
+  if (Object.values(need).some(v => v < 0)){
+    throw new Error("CSV Velneo: faltan columnas. Necesito Concepto, Descripción, Talla, EAN, Stock Nuevo, Stock Alquiler, Almacén.");
+  }
+
+  const out = [];
+  for (let li=1; li<lines.length; li++){
+    const cols = parseLine(lines[li]);
+
+    const concepto = String(cols[iConcepto] ?? "").trim();
+    const descripcion = String(cols[iDesc] ?? "").trim();
+    const talla = String(cols[iTalla] ?? "").trim();
+    const ean = String(cols[iEAN] ?? "").trim();
+    const almacen = String(cols[iAlm] ?? "").trim();
+
+    // saltar líneas basura tipo "0;;;;0;0;34" o sin EAN
+    if (!ean) continue;
+
+    out.push({
+      EAN: ean,
+      Concepto: concepto,
+      Descripcion: descripcion,
+      Talla: talla,
+      StockNuevo: toNumber(cols[iNuevo]),
+      StockUsado: toNumber(cols[iAlq]),
+      Almacen: almacen
+    });
+  }
+
+  return out;
 }
 
 function parseTiendasCSV(text){
@@ -644,17 +711,26 @@ function setupUI(){
   $("btnPrint")?.addEventListener("click", ()=> window.print());
 
   // Conciliación: cargar Velneo
-  $("fileVelneo")?.addEventListener("change", async (e)=>{
-    const f = e.target.files?.[0];
-    if(!f) return;
+$("fileVelneo")?.addEventListener("change", async (e)=>{
+  const f = e.target.files?.[0];
+  if(!f) return;
+
+  try{
     state.velneo = parseVelneoCSV(await f.text());
 
     const almacenesVelneo = [...new Set(state.velneo.map(r=>String(r.Almacen)).filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b,"es"));
+
     fillConcAlmacenDestinoOptions(almacenesVelneo);
 
-    setText("cMeta", `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`);
-  });
+    $("cMeta").textContent =
+      `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`;
+  }catch(err){
+    state.velneo = [];
+    alert(err?.message ?? String(err));
+  }
+});
+
 
   // Conciliación: cargar Tiendas (varios)
   $("fileTiendas")?.addEventListener("change", async (e)=>{
@@ -686,3 +762,4 @@ function setupUI(){
 
 // IMPORTANTE: esperar al DOM
 document.addEventListener("DOMContentLoaded", setupUI);
+
