@@ -4,30 +4,10 @@
 
 (function(){
 
-  function norm(v){
-    return String(v ?? "")
-      .replace(/\uFEFF/g, "")      // BOM
-      .trim()
-      .replace(/^"|"$/g, "");      // comillas externas
-  }
-
-  function normUpper(v){ return norm(v).toUpperCase(); }
-
-  function normEAN(v){
-    // deja solo dígitos si viene limpio, pero sin romper ean raros
-    const s = norm(v);
-    if (!s) return "";
-    const digits = s.replace(/\s+/g, "");
-    return digits;
-  }
-
-  function normTalla(v){
-    const t = norm(v);
-    return t ? t : "(SIN TALLA)";
-  }
+  function norm(v){ return String(v ?? "").trim(); }
 
   function key(ean, talla, almacen){
-    return `${normEAN(ean)}||${normTalla(talla)}||${norm(almacen)}`;
+    return `${norm(ean)}||${norm(talla)}||${norm(almacen)}`;
   }
 
   function add(map, k, field, val){
@@ -43,22 +23,33 @@
     return pairs.join(" ");
   }
 
+  // mappingAlmacenes puede ser:
+  // - { "3":"34", "4":"34" }  (igual para todo)
+  // - { nuevo:{...}, usado:{...} }  (distinto por uso)
+  function getMapping(mappingAlmacenes, field){
+    if (!mappingAlmacenes) return {};
+    if (mappingAlmacenes.nuevo || mappingAlmacenes.usado){
+      return mappingAlmacenes[field] || {};
+    }
+    return mappingAlmacenes;
+  }
+
   window.generarConciliacion = function({
     velneoRows,
     tiendasRows,
-    mappingAlmacenes  // ej: { "3":"34", "4":"34", "7":"34" }
+    mappingAlmacenes
   }){
 
     // 1) Velneo -> Map por (EAN,talla,almacen) con nuevo/usado
     const velneo = new Map();
-    const metaByEAN = new Map(); // ean -> {concepto, descripcion}
+    const metaByEAN = new Map(); // {concepto, descripcion}
 
-    (velneoRows || []).forEach(r=>{
-      const ean = normEAN(r.EAN);
+    velneoRows.forEach(r=>{
+      const ean = norm(r.EAN);
       if (!ean) return;
 
       const almacen = norm(r.Almacen);
-      const talla = normTalla(r.Talla);
+      const talla = norm(r.Talla);
 
       const k = key(ean, talla, almacen);
 
@@ -76,32 +67,26 @@
     // 2) Tiendas -> Map por (EAN,talla,almacenDestino) con nuevo/usado
     const tiendas = new Map();
 
-    (tiendasRows || []).forEach(r=>{
-      const tienda = norm(r.tienda);
-      const almacenDestino = mappingAlmacenes ? mappingAlmacenes[tienda] : null;
-      if(!almacenDestino) return;
-
-      const ean = normEAN(r.ean);
-      if (!ean) return;
-
-      const talla = normTalla(r.talla);
-      const k = key(ean, talla, almacenDestino);
-
-      const uso = normUpper(r.uso);
+    tiendasRows.forEach(r=>{
+      const uso = norm(r.uso).toUpperCase();
       const field = (uso === "NUEVO") ? "nuevo" : "usado";
 
-      add(tiendas, k, field, r.unidades);
+      const tienda = norm(r.tienda);
 
-      // si no existe en velneo, crea meta “dummy” para que salga en resultado
-      if(!metaByEAN.has(ean)){
-        metaByEAN.set(ean, {
-          concepto: "(SIN VELNEO)",
-          descripcion: `EAN: ${ean}`
-        });
-      }
+      const mapUso = getMapping(mappingAlmacenes, field);
+      const almacenDestino = mapUso[tienda];
+      if(!almacenDestino) return;
+
+      const ean = norm(r.ean);
+      if (!ean) return;
+
+      const talla = norm(r.talla);
+      const k = key(ean, talla, almacenDestino);
+
+      add(tiendas, k, field, r.unidades);
     });
 
-    // 3) Agregación final por (EAN, almacenDestino, uso) con tallas en mapa
+    // 3) Agregación final por (EAN, almacen, uso) con tallas en mapa
     const group = new Map(); // gkey -> {meta, uso, almacen, V:MapTalla, T:MapTalla, D:MapTalla}
 
     function gkey(ean, almacen, uso){
@@ -112,8 +97,8 @@
 
     allKeys.forEach(k=>{
       const [ean, talla, almacen] = k.split("||");
-
-      const m = metaByEAN.get(ean) || { concepto:"(SIN META)", descripcion:`EAN: ${ean}` };
+      const m = metaByEAN.get(ean);
+      if(!m) return;
 
       const v = velneo.get(k) || {nuevo:0, usado:0};
       const t = tiendas.get(k) || {nuevo:0, usado:0};
@@ -191,7 +176,7 @@
       }
     }
 
-    // Orden: Concepto/Desc/uso y que Dif quede arriba
+    // Orden: Concepto/Desc/uso y que Dif quede visible
     resultado.sort((a,b)=>{
       const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
       const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
