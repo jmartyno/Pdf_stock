@@ -24,8 +24,8 @@ function normalizeKey(s){
     .toLowerCase()
     .replaceAll("á","a").replaceAll("é","e").replaceAll("í","i").replaceAll("ó","o").replaceAll("ú","u")
     .replaceAll("ñ","n")
-    .replaceAll("�","")              // quita carácter raro
-    .replace(/[^a-z0-9]+/g, "");     // quita espacios, flechas, etc.
+    .replaceAll("�","")
+    .replace(/[^a-z0-9]+/g, "");
 }
 
 function toNumber(v){
@@ -63,6 +63,7 @@ function sortTallas(list){
   return arr;
 }
 
+/* ===================== CSV genérico (pivot) ===================== */
 function parseCSV(text){
   const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(l => l.trim().length>0);
   if (!lines.length) return [];
@@ -105,7 +106,6 @@ function parseCSV(text){
   const iNuevo  = pickIdx("Stock Nuevo");
   const iUsado  = pickIdx("Stock Alquiler", "Stock Usado", "Usado");
   const iAlm    = pickIdx("Almacén", "Almacen", "Almac�n");
-  const iEAN    = pickIdx("Talla -> Código de barras", "Talla -> C�digo de barras", "EAN", "ean");
 
   const need = {iNombre,iGrupo,iTalla,iNuevo,iUsado,iAlm};
   if (Object.values(need).some(v => v < 0)){
@@ -121,8 +121,7 @@ function parseCSV(text){
       Talla: String(cols[iTalla] ?? "").trim(),
       StockNuevo: toNumber(cols[iNuevo]),
       StockUsado: toNumber(cols[iUsado]),
-      Almacen: cols[iAlm] ?? "",
-      EAN: iEAN >= 0 ? (cols[iEAN] ?? "") : ""
+      Almacen: cols[iAlm] ?? ""
     });
   }
   return rows;
@@ -424,10 +423,9 @@ function applyFilters(){
   $("meta").textContent = `Filas: ${filtered.length} | Artículos: ${pivot.items.length} | Tallas: ${pivot.tallas.length}`;
 }
 
-/* ====== Conciliación ====== */
+/* ===================== Conciliación ===================== */
 
 function parseVelneoCSV(text){
-  // Parser específico para export Velneo (no usa parseCSV del pivot)
   const lines = text
     .replace(/\r\n/g,"\n").replace(/\r/g,"\n")
     .split("\n")
@@ -466,43 +464,29 @@ function parseVelneoCSV(text){
     return -1;
   };
 
- const iConcepto = pickIdx("Concepto"); // opcional
-const iDesc     = pickIdx(
-  "Descripcion","Descripción",
-  "Concepto -> Descripción","Concepto -> Descripci�n",
-  "Concepto -> Descripcion","Concepto -> Descripcio�n"
-); // opcional
+  const iConcepto = pickIdx("Concepto");
+  const iDesc     = pickIdx("Descripcion", "Descripción", "Concepto -> Descripción", "Concepto -> Descripci�n", "Descripci�n");
+  const iTalla    = pickIdx("Talla");
+  const iEAN      = pickIdx("EAN", "Talla -> Código de barras", "Talla -> C�digo de barras");
+  const iNuevo    = pickIdx("Stock Nuevo");
+  const iAlq      = pickIdx("Stock Alquiler", "Stock Usado");
+  const iAlm      = pickIdx("Almacén", "Almacen", "Almac�n");
 
-const iTalla = pickIdx("Talla");
-
-const iEAN = pickIdx(
-  "EAN","ean",
-  "Talla -> Código de barras","Talla -> Codigo de barras",
-  "Talla -> C�digo de barras","Talla -> C�digo de barras"
-);
-
-const iNuevo = pickIdx("Stock Nuevo");
-const iAlq   = pickIdx("Stock Alquiler", "Stock Usado");
-const iAlm   = pickIdx("Almacén", "Almacen", "Almac�n");
-
-// SOLO exigimos lo imprescindible
-const need = {iTalla,iEAN,iNuevo,iAlq,iAlm};
-if (Object.values(need).some(v => v < 0)){
-  throw new Error("CSV Velneo: faltan columnas. Necesito Talla, EAN, Stock Nuevo, Stock Alquiler y Almacén.");
-}
-
+  const need = {iConcepto,iDesc,iTalla,iEAN,iNuevo,iAlq,iAlm};
+  if (Object.values(need).some(v => v < 0)){
+    throw new Error("CSV Velneo: faltan columnas. Necesito Concepto, Descripcion, Talla, EAN, Stock Nuevo, Stock Alquiler, Almacen.");
+  }
 
   const out = [];
   for (let li=1; li<lines.length; li++){
     const cols = parseLine(lines[li]);
 
-    const concepto = iConcepto >= 0 ? String(cols[iConcepto] ?? "").trim() : "";
-    const descripcion = iDesc >= 0 ? String(cols[iDesc] ?? "").trim() : "";
+    const concepto = String(cols[iConcepto] ?? "").trim();
+    const descripcion = String(cols[iDesc] ?? "").trim();
     const talla = String(cols[iTalla] ?? "").trim();
     const ean = String(cols[iEAN] ?? "").trim();
     const almacen = String(cols[iAlm] ?? "").trim();
 
-    // saltar líneas basura tipo "0;;;;0;0;34" o sin EAN
     if (!ean) continue;
 
     out.push({
@@ -595,7 +579,7 @@ function fillConcTiendasChecklistFromData(){
 function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
   const soloDif = !!$("cSoloDif")?.checked;
-  const usoSel = ($("cUso")?.value || "").trim();   // 👈 NUEVO
+  const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
 
   let rows = state.concAll || [];
 
@@ -606,88 +590,78 @@ function applyConciliacionViewFilters(){
       return c.includes(q) || d.includes(q);
     });
   }
-
   if (soloDif){
     rows = rows.filter(r => r.Almacen === "Dif");
   }
-
-  // 👇 NUEVO FILTRO
   if (usoSel){
-    rows = rows.filter(r => r.Uso === usoSel);
+    rows = rows.filter(r => String(r.Uso) === usoSel);
   }
 
   setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
   renderTablaConciliacion(rows);
 }
 
+function buildMappingsForConciliacion(destAlmacen){
+  const selTiendas = selectedChecklist("cTiendaList").map(String);
 
-function buildMappingFromSelectedTiendas(destAlmacen){
-  const selTiendas = selectedChecklist("cTiendaList");
-  const map = {};
-  selTiendas.forEach(t=>{ map[String(t)] = String(destAlmacen); });
-  return map;
+  const mapNuevo = {};
+  const mapUsado = {};
+
+  // Regla fija: si destino = 34, la tienda 99 SOLO cuenta en USADO.
+  const ruleExclude99FromNuevo = (String(destAlmacen).trim() === "34");
+
+  selTiendas.forEach(t=>{
+    const tienda = String(t).trim();
+
+    // Usado: siempre entra
+    mapUsado[tienda] = String(destAlmacen);
+
+    // Nuevo: entra salvo la regla del 99 (solo para destino 34)
+    if (ruleExclude99FromNuevo && tienda === "99"){
+      return;
+    }
+    mapNuevo[tienda] = String(destAlmacen);
+  });
+
+  return { nuevo: mapNuevo, usado: mapUsado };
 }
 
-async function runConciliacion(){
+function runConciliacion(){
   if (typeof generarConciliacion !== "function"){
     alert("Falta cargar modules/conciliacion.js antes que app.js");
     return;
   }
-
-  // 1) Asegurar Velneo cargado (aunque el change no haya disparado)
   if (!state.velneo.length){
-    const fV = $("fileVelneo")?.files?.[0];
-    if (!fV){
-      alert("Carga primero el CSV de Velneo.");
-      return;
-    }
-    try{
-      state.velneo = parseVelneoCSV(await fV.text());
-    }catch(err){
-      state.velneo = [];
-      alert(err?.message ?? String(err));
-      return;
-    }
-
-    const almacenesVelneo = [...new Set(state.velneo.map(r=>String(r.Almacen)).filter(Boolean))]
-      .sort((a,b)=>a.localeCompare(b,"es"));
-    fillConcAlmacenDestinoOptions(almacenesVelneo);
-    setText("cMeta", `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`);
+    alert("Carga primero el CSV de Velneo.");
+    return;
   }
-
-  // 2) Asegurar Tiendas cargado
   if (!state.tiendas.length){
-    const filesT = Array.from($("fileTiendas")?.files || []);
-    if (!filesT.length){
-      alert("Carga primero los CSV de Tiendas.");
-      return;
-    }
-    state.tiendas = [];
-    for (const f of filesT){
-      state.tiendas.push(...parseTiendasCSV(await f.text()));
-    }
-    fillConcTiendasChecklistFromData();
-    setText("cMeta", `Tiendas cargadas: ${state.tiendas.length} filas | Tiendas: ${state.concTiendasList.join(", ")}`);
+    alert("Carga primero los CSV de Tiendas.");
+    return;
   }
 
-  // 3) Validar destino
   const dest = String($("cAlmacenDestino")?.value || "").trim();
   if (!dest){
     alert("Selecciona Almacén destino (Velneo).");
     return;
   }
 
-  const mappingAlmacenes = buildMappingFromSelectedTiendas(dest);
+  const totalTiendas = document.querySelectorAll("#cTiendaList input").length;
+  const tiendasSel = selectedChecklist("cTiendaList");
+  if (totalTiendas > 0 && tiendasSel.length === 0){
+    alert("Selecciona al menos una tienda para sumar.");
+    return;
+  }
 
-  // solo tiendas seleccionadas
-  const tiendasFiltradas = state.tiendas.filter(r => mappingAlmacenes[String(r.tienda).trim()] !== undefined);
-
-  // velneo solo del almacén destino
+  // Velneo solo del almacén destino
   const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
+
+  // Mappings por uso (nuevo/usado)
+  const mappingAlmacenes = buildMappingsForConciliacion(dest);
 
   const res = generarConciliacion({
     velneoRows: velneoFiltrado,
-    tiendasRows: tiendasFiltradas,
+    tiendasRows: state.tiendas, // ya filtra dentro por mapping
     mappingAlmacenes
   });
 
@@ -744,7 +718,6 @@ function setupUI(){
   $("btnGrupoNone")?.addEventListener("click", ()=>{ setAll("fGrupoList", false); applyFilters(); });
   $("btnAlmAll")?.addEventListener("click", ()=>{ setAll("fAlmacenList", true); applyFilters(); });
   $("btnAlmNone")?.addEventListener("click", ()=>{ setAll("fAlmacenList", false); applyFilters(); });
-  $("cUso")?.addEventListener("change", applyConciliacionViewFilters);
 
   ["qNombre","hideZeros","hideEmptyRows"].forEach(id=>{
     $(id)?.addEventListener("input", applyFilters);
@@ -767,26 +740,23 @@ function setupUI(){
   $("btnPrint")?.addEventListener("click", ()=> window.print());
 
   // Conciliación: cargar Velneo
-$("fileVelneo")?.addEventListener("change", async (e)=>{
-  const f = e.target.files?.[0];
-  if(!f) return;
+  $("fileVelneo")?.addEventListener("change", async (e)=>{
+    const f = e.target.files?.[0];
+    if(!f) return;
 
-  try{
-    state.velneo = parseVelneoCSV(await f.text());
+    try{
+      state.velneo = parseVelneoCSV(await f.text());
 
-    const almacenesVelneo = [...new Set(state.velneo.map(r=>String(r.Almacen)).filter(Boolean))]
-      .sort((a,b)=>a.localeCompare(b,"es"));
+      const almacenesVelneo = [...new Set(state.velneo.map(r=>String(r.Almacen)).filter(Boolean))]
+        .sort((a,b)=>a.localeCompare(b,"es"));
 
-    fillConcAlmacenDestinoOptions(almacenesVelneo);
-
-    $("cMeta").textContent =
-      `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`;
-  }catch(err){
-    state.velneo = [];
-    alert(err?.message ?? String(err));
-  }
-});
-
+      fillConcAlmacenDestinoOptions(almacenesVelneo);
+      setText("cMeta", `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`);
+    }catch(err){
+      state.velneo = [];
+      alert(err?.message ?? String(err));
+    }
+  });
 
   // Conciliación: cargar Tiendas (varios)
   $("fileTiendas")?.addEventListener("change", async (e)=>{
@@ -802,26 +772,20 @@ $("fileVelneo")?.addEventListener("change", async (e)=>{
   // Conciliación: filtros vista
   $("cQ")?.addEventListener("input", applyConciliacionViewFilters);
   $("cSoloDif")?.addEventListener("change", applyConciliacionViewFilters);
+  $("cUso")?.addEventListener("change", applyConciliacionViewFilters);
 
   // Tiendas checklist
   $("cTiendaSearch")?.addEventListener("input", ()=> applySearchToChecklist("cTiendaSearch","cTiendaList"));
   $("cTiendaAll")?.addEventListener("click", ()=> setAll("cTiendaList", true));
   $("cTiendaNone")?.addEventListener("click", ()=> setAll("cTiendaList", false));
 
-  // Presets (IDs correctos del HTML)
-  $("cPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7"]));
-  $("cPreset11")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
+  // Presets
+  // NOTA: dejamos marcado 99 también, pero el código lo excluye de NUEVO cuando destino=34
+  $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7","99"]));
+  $("btnPreset1")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
 
   // Conciliar
   $("btnConciliar")?.addEventListener("click", runConciliacion);
 }
 
-// IMPORTANTE: esperar al DOM
-setupUI();
-
-
-
-
-
-
-
+document.addEventListener("DOMContentLoaded", setupUI);
