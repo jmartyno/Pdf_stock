@@ -595,6 +595,7 @@ function fillConcTiendasChecklistFromData(){
 function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
   const soloDif = !!$("cSoloDif")?.checked;
+  const usoSel = ($("cUso")?.value || "").trim();   // 👈 NUEVO
 
   let rows = state.concAll || [];
 
@@ -605,13 +606,20 @@ function applyConciliacionViewFilters(){
       return c.includes(q) || d.includes(q);
     });
   }
+
   if (soloDif){
     rows = rows.filter(r => r.Almacen === "Dif");
+  }
+
+  // 👇 NUEVO FILTRO
+  if (usoSel){
+    rows = rows.filter(r => r.Uso === usoSel);
   }
 
   setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
   renderTablaConciliacion(rows);
 }
+
 
 function buildMappingFromSelectedTiendas(destAlmacen){
   const selTiendas = selectedChecklist("cTiendaList");
@@ -736,6 +744,7 @@ function setupUI(){
   $("btnGrupoNone")?.addEventListener("click", ()=>{ setAll("fGrupoList", false); applyFilters(); });
   $("btnAlmAll")?.addEventListener("click", ()=>{ setAll("fAlmacenList", true); applyFilters(); });
   $("btnAlmNone")?.addEventListener("click", ()=>{ setAll("fAlmacenList", false); applyFilters(); });
+  $("cUso")?.addEventListener("change", applyConciliacionViewFilters);
 
   ["qNombre","hideZeros","hideEmptyRows"].forEach(id=>{
     $(id)?.addEventListener("input", applyFilters);
@@ -809,6 +818,7 @@ $("fileVelneo")?.addEventListener("change", async (e)=>{
 
 // IMPORTANTE: esperar al DOM
 setupUI();
+
 
 
 
