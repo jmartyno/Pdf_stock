@@ -496,8 +496,8 @@ if (Object.values(need).some(v => v < 0)){
   for (let li=1; li<lines.length; li++){
     const cols = parseLine(lines[li]);
 
-    const concepto = String(cols[iConcepto] ?? "").trim();
-    const descripcion = String(cols[iDesc] ?? "").trim();
+    const concepto = iConcepto >= 0 ? String(cols[iConcepto] ?? "").trim() : "";
+    const descripcion = iDesc >= 0 ? String(cols[iDesc] ?? "").trim() : "";
     const talla = String(cols[iTalla] ?? "").trim();
     const ean = String(cols[iEAN] ?? "").trim();
     const almacen = String(cols[iAlm] ?? "").trim();
@@ -809,6 +809,7 @@ $("fileVelneo")?.addEventListener("change", async (e)=>{
 
 // IMPORTANTE: esperar al DOM
 setupUI();
+
 
 
 
