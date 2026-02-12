@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+
   <header class="bar no-print">
     <div class="left">
       <h1>Stock por tallas</h1>
@@ -21,9 +22,11 @@
     </div>
   </header>
 
-  <!-- PIVOT -->
+  <!-- ======================= PIVOT ======================= -->
+
   <section class="panel no-print">
     <div class="row">
+
       <div class="field">
         <div class="lbl">Buscar (Nombre)</div>
         <input id="qNombre" type="text" placeholder="Ej: CAZ WALER" />
@@ -63,6 +66,7 @@
         <div class="lbl">&nbsp;</div>
         <button id="btnReset" class="btn secondary">Reset</button>
       </div>
+
     </div>
 
     <div class="row">
@@ -71,6 +75,7 @@
   </section>
 
   <main class="content">
+
     <section>
       <h2>Tabla por tallas</h2>
       <div id="tableWrap" class="tableWrap"></div>
@@ -85,9 +90,13 @@
 
     <section class="spacer"></section>
 
-    <!-- CONCILIACIÓN -->
+    <!-- ======================= CONCILIACIÓN ======================= -->
+
     <section class="panel no-print">
+
+      <!-- Carga y preset -->
       <div class="row">
+
         <div class="field">
           <div class="lbl">CSV Velneo</div>
           <input id="fileVelneo" type="file" accept=".csv">
@@ -101,8 +110,8 @@
         <div class="field">
           <div class="lbl">Preset</div>
           <div class="miniBtns">
-            <button id="btnPreset34" type="button" class="btn secondary">34 ⇄ (3+4+7)</button>
-            <button id="btnPreset1" type="button" class="btn secondary">1 ⇄ 1</button>
+            <button id="cPreset34" type="button" class="btn secondary">34 ⇄ (3+4+7)</button>
+            <button id="cPreset11" type="button" class="btn secondary">1 ⇄ 1</button>
           </div>
         </div>
 
@@ -115,9 +124,12 @@
           <div class="lbl">Generar conciliación</div>
           <button id="btnConciliar" class="btn">Conciliar</button>
         </div>
+
       </div>
 
-      <div class="row" style="margin-top:10px;">
+      <!-- Filtros conciliación -->
+      <div class="row" style="margin-top:15px;">
+
         <div class="field">
           <div class="lbl">Tiendas (CSV) a sumar</div>
           <input id="cTiendaSearch" type="text" placeholder="Buscar tienda (ej: 3 / Ayala)" />
@@ -134,8 +146,6 @@
         </div>
 
         <div class="field">
-          <div class="lbl">Buscar (Concepto / Descripción)</div>
-          <div class="field">
           <div class="lbl">Uso</div>
           <select id="cUso">
             <option value="">Todos</option>
@@ -144,27 +154,32 @@
           </select>
         </div>
 
+        <div class="field">
+          <div class="lbl">Buscar (Concepto / Descripción)</div>
           <input id="cQ" type="text" placeholder="Ej: 100 / CHQ C 999" />
         </div>
+
       </div>
 
       <div class="row">
         <div id="cMeta" class="meta"></div>
       </div>
+
     </section>
 
     <section>
       <h2>Conciliación</h2>
       <div id="conciliacionWrap" class="tableWrap"></div>
     </section>
+
   </main>
 
   <footer class="foot no-print">
-    Tip: Para PDF, usa “Imprimir” → Destino “Guardar como PDF” → Diseño “Horizontal”.
+    Tip: Para PDF → Imprimir → Destino “Guardar como PDF” → Horizontal.
   </footer>
 
   <script src="./modules/conciliacion.js"></script>
   <script src="./app.js"></script>
+
 </body>
 </html>
-
