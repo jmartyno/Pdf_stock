@@ -607,20 +607,49 @@ function buildMappingFromSelectedTiendas(destAlmacen){
   return map;
 }
 
-function runConciliacion(){
+async function runConciliacion(){
   if (typeof generarConciliacion !== "function"){
     alert("Falta cargar modules/conciliacion.js antes que app.js");
     return;
   }
+
+  // 1) Asegurar Velneo cargado (aunque el change no haya disparado)
   if (!state.velneo.length){
-    alert("Carga primero el CSV de Velneo.");
-    return;
-  }
-  if (!state.tiendas.length){
-    alert("Carga primero los CSV de Tiendas.");
-    return;
+    const fV = $("fileVelneo")?.files?.[0];
+    if (!fV){
+      alert("Carga primero el CSV de Velneo.");
+      return;
+    }
+    try{
+      state.velneo = parseVelneoCSV(await fV.text());
+    }catch(err){
+      state.velneo = [];
+      alert(err?.message ?? String(err));
+      return;
+    }
+
+    const almacenesVelneo = [...new Set(state.velneo.map(r=>String(r.Almacen)).filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b,"es"));
+    fillConcAlmacenDestinoOptions(almacenesVelneo);
+    setText("cMeta", `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`);
   }
 
+  // 2) Asegurar Tiendas cargado
+  if (!state.tiendas.length){
+    const filesT = Array.from($("fileTiendas")?.files || []);
+    if (!filesT.length){
+      alert("Carga primero los CSV de Tiendas.");
+      return;
+    }
+    state.tiendas = [];
+    for (const f of filesT){
+      state.tiendas.push(...parseTiendasCSV(await f.text()));
+    }
+    fillConcTiendasChecklistFromData();
+    setText("cMeta", `Tiendas cargadas: ${state.tiendas.length} filas | Tiendas: ${state.concTiendasList.join(", ")}`);
+  }
+
+  // 3) Validar destino
   const dest = String($("cAlmacenDestino")?.value || "").trim();
   if (!dest){
     alert("Selecciona Almacén destino (Velneo).");
@@ -766,6 +795,8 @@ $("fileVelneo")?.addEventListener("change", async (e)=>{
 }
 
 // IMPORTANTE: esperar al DOM
-document.addEventListener("DOMContentLoaded", setupUI);
+setupUI();
+
+
 
 
