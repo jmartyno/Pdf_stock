@@ -602,24 +602,20 @@ function applyConciliacionViewFilters(){
 }
 
 function buildMappingsForConciliacion(destAlmacen){
-  const selTiendas = selectedChecklist("cTiendaList").map(String);
+  const selTiendas = selectedChecklist("cTiendaList").map(t => String(t).trim().toLowerCase());
 
   const mapNuevo = {};
   const mapUsado = {};
 
-  // Regla fija: si destino = 34, la tienda 99 SOLO cuenta en USADO.
-  const ruleExclude99FromNuevo = (String(destAlmacen).trim() === "34");
+  // Regla fija: si destino = 34, "central" SOLO cuenta en USADO.
+  const ruleExcludeCentralFromNuevo = (String(destAlmacen).trim() === "34");
 
-  selTiendas.forEach(t=>{
-    const tienda = String(t).trim();
-
+  selTiendas.forEach(tienda=>{
     // Usado: siempre entra
     mapUsado[tienda] = String(destAlmacen);
 
-    // Nuevo: entra salvo la regla del 99 (solo para destino 34)
-    if (ruleExclude99FromNuevo && tienda === "99"){
-      return;
-    }
+    // Nuevo: entra salvo CENTRAL en destino 34
+    if (ruleExcludeCentralFromNuevo && tienda === "central") return;
     mapNuevo[tienda] = String(destAlmacen);
   });
 
@@ -781,7 +777,7 @@ function setupUI(){
 
   // Presets
   // NOTA: dejamos marcado 99 también, pero el código lo excluye de NUEVO cuando destino=34
-  $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7","99"]));
+  $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7","central"]));
   $("btnPreset1")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
 
   // Conciliar
@@ -789,3 +785,4 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
