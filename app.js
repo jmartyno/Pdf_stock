@@ -632,6 +632,7 @@ function renderTablaConciliacion(rows, destAlmacen){
 function fillConcAlmacenDestinoOptions(almacenesVelneo){
   const sel = $("cAlmacenDestino");
   if (!sel) return;
+
   sel.innerHTML = "";
   almacenesVelneo.forEach(a=>{
     const o=document.createElement("option");
@@ -639,6 +640,11 @@ function fillConcAlmacenDestinoOptions(almacenesVelneo){
     o.textContent = String(a);
     sel.appendChild(o);
   });
+
+  // ✅ si no hay seleccionado, selecciona el primero
+  if (sel.options.length && !sel.value) {
+    sel.value = sel.options[0].value;
+  }
 }
 
 function fillConcTiendasChecklistFromData(){
@@ -859,3 +865,4 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
