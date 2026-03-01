@@ -15,68 +15,52 @@
     map.get(k)[field] += (Number(val) || 0);
   }
 
-  function isNumTalla(t){
-    return /^[0-9]+$/.test(String(t).trim());
-  }
-
-  function sortTallasAsc(list){
-    const arr = [...new Set(list.map(x => String(x).trim()).filter(Boolean))];
+  // Convierte Map talla->valor a string "44:2 46:-1 UNICO:1" (ASC)
+  function tallasToText(mapTalla){
+    const entries = [...mapTalla.entries()]
+      .map(([t,v]) => [String(t).trim(), Number(v)||0])
+      .filter(([,v]) => v !== 0);
 
     const isUnico = (s)=>{
       const v = String(s).trim().toLowerCase();
       return v === "unico" || v === "único" || v === "u" || v === "unica" || v === "única";
     };
 
-    arr.sort((a,b)=>{
-      const au=isUnico(a), bu=isUnico(b);
-      if (au && !bu) return 1;     // UNICO al final
+    const numVal = (s)=>{
+      const m = String(s).match(/\d+/);
+      return m ? Number(m[0]) : NaN;
+    };
+
+    entries.sort(([ta],[tb])=>{
+      const au=isUnico(ta), bu=isUnico(tb);
+      if (au && !bu) return 1;
       if (!au && bu) return -1;
 
-      const an=isNumTalla(a), bn=isNumTalla(b);
-      if (an && bn) return Number(a)-Number(b);
-      if (an && !bn) return -1;
-      if (!an && bn) return 1;
+      const na = numVal(ta), nb = numVal(tb);
+      const aNum = Number.isFinite(na), bNum = Number.isFinite(nb);
 
-      return a.localeCompare(b, "es");
+      if (aNum && bNum) return na - nb;     // ✅ ASC
+      if (aNum && !bNum) return -1;
+      if (!aNum && bNum) return 1;
+
+      return ta.localeCompare(tb, "es");
     });
 
-    return arr;
+    return entries.map(([t,v]) => `${t}:${v}`).join(" ");
   }
 
-  // Convierte Map talla->valor a string "44:2 46:-1 UNICO:1" (ASC)
-  function tallasToText(mapTalla){
-  const entries = [...mapTalla.entries()]
-    .map(([t,v]) => [String(t).trim(), Number(v)||0])
-    .filter(([,v]) => v !== 0);
+  // Saca una “clave” numérica de la PRIMERA talla de la fila (para ordenar filas tipo 70:1)
+  function tallaKeyFromRow(row){
+    const tallas = String(row?.Tallas || "").trim(); // "70:1"
+    const first = tallas.split(/\s+/)[0] || "";
+    const talla = first.split(":")[0]?.trim() || "";
+    const low = talla.toLowerCase();
 
-  const isUnico = (s)=>{
-    const v = String(s).trim().toLowerCase();
-    return v === "unico" || v === "único" || v === "u" || v === "unica" || v === "única";
-  };
+    if (["unico","único","u","unica","única"].includes(low)) return 999999;
 
-  const numVal = (s)=>{
-    // saca el primer número que encuentre (vale para "70", "70-", "70 XL", etc.)
-    const m = String(s).match(/\d+/);
-    return m ? Number(m[0]) : NaN;
-  };
-
-  entries.sort(([ta],[tb])=>{
-    const au=isUnico(ta), bu=isUnico(tb);
-    if (au && !bu) return 1;
-    if (!au && bu) return -1;
-
-    const na = numVal(ta), nb = numVal(tb);
-    const aNum = Number.isFinite(na), bNum = Number.isFinite(nb);
-
-    if (aNum && bNum) return na - nb;     // ✅ ASC
-    if (aNum && !bNum) return -1;
-    if (!aNum && bNum) return 1;
-
-    return ta.localeCompare(tb, "es");
-  });
-
-  return entries.map(([t,v]) => `${t}:${v}`).join(" ");
-}
+    const m = talla.match(/\d+/);
+    return m ? Number(m[0]) : 999998;
+  }
 
   window.generarConciliacion = function({
     velneoRows,
@@ -192,7 +176,7 @@
           EAN: it.ean,
           Concepto: it.concepto,
           Descripcion: it.descripcion,
-          Almacen: it.almacen,
+          Almacen: it.almacen,     // Velneo
           Uso: it.uso,
           Tallas: tallasToText(it.V),
           Total: totalV
@@ -222,14 +206,21 @@
       }
     }
 
-    // Orden: por Concepto/Desc/Uso, y dentro Dif primero
+    // ✅ Orden visible: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, y luego talla ASC
     resultado.sort((a,b)=>{
       const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
       const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
       if (ak !== bk) return ak.localeCompare(bk, "es");
 
       const prio = (x)=> x.Almacen==="Dif" ? 0 : (x.Almacen==="CSV" ? 1 : 2);
-      return prio(a) - prio(b);
+      const pa = prio(a), pb = prio(b);
+      if (pa !== pb) return pa - pb;
+
+      const ta = tallaKeyFromRow(a);
+      const tb = tallaKeyFromRow(b);
+      if (ta !== tb) return ta - tb; // ASC
+
+      return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
     });
 
     return resultado;
