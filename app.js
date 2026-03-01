@@ -1,3 +1,4 @@
+// app.js
 // Stock por tallas: CSV local -> pivot con tallas en columnas + filtros + print
 const $ = (id) => document.getElementById(id);
 
@@ -11,7 +12,7 @@ const state = {
   concAll: [],
   concTiendasList: [],
 
-  concVelneoStock: new Map() // <-- para "Queda (Velneo)"
+  concVelneoStock: new Map() // para "Queda (Velneo)"
 };
 
 function setText(id, txt){
@@ -564,16 +565,14 @@ function calcQueda(row, destAlmacen){
   const pairs = parseTallasText(row.Tallas);
   if (!pairs.length) return "";
 
-  // si solo una talla -> devolvemos número limpio (lo que quieres)
   if (pairs.length === 1){
     const [talla, dif] = pairs[0];
     const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
     const vel = Number(state.concVelneoStock.get(k) || 0);
-    const queda = vel - dif; // queda = velneo - diferencia
+    const queda = vel - dif;
     return String(queda);
   }
 
-  // varias tallas -> resumen
   const parts = [];
   for (const [talla, dif] of pairs){
     const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
@@ -582,6 +581,18 @@ function calcQueda(row, destAlmacen){
     parts.push(`${talla}→${queda}`);
   }
   return parts.join(" ");
+}
+
+/* --- ORDEN ASC por talla (para DIF/CSV/Velneo) --- */
+function tallaKeyFromRow(r){
+  const tallas = String(r?.Tallas || "").trim();     // ej: "70:1"
+  const talla = tallas.split(/\s+/)[0]?.split(":")[0]?.trim() || "";
+  const low = talla.toLowerCase();
+
+  if (["unico","único","u","unica","única"].includes(low)) return 999999;
+
+  const m = talla.match(/\d+/);
+  return m ? Number(m[0]) : 999998;
 }
 
 function renderTablaConciliacion(rows, destAlmacen){
@@ -598,7 +609,6 @@ function renderTablaConciliacion(rows, destAlmacen){
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
 
-  // OJO: añadimos "Queda (Velneo)"
   ["Concepto","Descripcion","Almacen","Uso","Tallas","Total","Queda (Velneo)"].forEach(h=>{
     const th=document.createElement("th");
     th.textContent=h;
@@ -641,7 +651,6 @@ function fillConcAlmacenDestinoOptions(almacenesVelneo){
     sel.appendChild(o);
   });
 
-  // ✅ si no hay seleccionado, selecciona el primero
   if (sel.options.length && !sel.value) {
     sel.value = sel.options[0].value;
   }
@@ -676,6 +685,23 @@ function applyConciliacionViewFilters(){
   if (usoSel){
     rows = rows.filter(r => String(r.Uso) === usoSel);
   }
+
+  // ✅ ORDEN VISIBLE: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
+  rows = [...rows].sort((a,b)=>{
+    const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
+    const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
+    if (ak !== bk) return ak.localeCompare(bk, "es");
+
+    const prio = (x)=> x.Almacen==="Dif" ? 0 : (x.Almacen==="CSV" ? 1 : 2);
+    const pa = prio(a), pb = prio(b);
+    if (pa !== pb) return pa - pb;
+
+    const ta = tallaKeyFromRow(a);
+    const tb = tallaKeyFromRow(b);
+    if (ta !== tb) return ta - tb; // ASC
+
+    return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
+  });
 
   setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
   renderTablaConciliacion(rows, dest);
@@ -743,9 +769,10 @@ function runConciliacion(){
 
   state.concAll = res;
   applyConciliacionViewFilters();
+
   if (res.length && !res[0].EAN){
-  alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh y revisa el archivo modules/conciliacion.js.");
-}
+    alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh y revisa el archivo modules/conciliacion.js.");
+  }
 }
 
 function applyPreset(destAlmacen, tiendasList){
@@ -858,8 +885,7 @@ function setupUI(){
   $("cTiendaAll")?.addEventListener("click", ()=> setAll("cTiendaList", true));
   $("cTiendaNone")?.addEventListener("click", ()=> setAll("cTiendaList", false));
 
-  // Presets
-  // (incluye central, pero el código la excluye de NUEVO si destino=34)
+  // Presets (incluye central; el código la excluye de NUEVO si destino=34)
   $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7","central"]));
   $("btnPreset1")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
 
@@ -868,5 +894,3 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
-
-
