@@ -743,6 +743,9 @@ function runConciliacion(){
 
   state.concAll = res;
   applyConciliacionViewFilters();
+  if (res.length && !res[0].EAN){
+  alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh y revisa el archivo modules/conciliacion.js.");
+}
 }
 
 function applyPreset(destAlmacen, tiendasList){
@@ -865,4 +868,5 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
 
