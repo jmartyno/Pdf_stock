@@ -9,7 +9,9 @@ const state = {
   velneo: [],
   tiendas: [],
   concAll: [],
-  concTiendasList: []
+  concTiendasList: [],
+
+  concVelneoStock: new Map() // <-- para "Queda (Velneo)"
 };
 
 function setText(id, txt){
@@ -518,7 +520,71 @@ function parseTiendasCSV(text){
   });
 }
 
-function renderTablaConciliacion(rows){
+/* --- helpers para "Queda (Velneo)" --- */
+function parseTallasText(s){
+  return String(s||"")
+    .split(/\s+/)
+    .map(x => x.trim())
+    .filter(Boolean)
+    .map(pair=>{
+      const i = pair.lastIndexOf(":");
+      if (i < 0) return null;
+      const t = pair.slice(0,i).trim();
+      const v = Number(pair.slice(i+1).trim());
+      if (!t || !Number.isFinite(v)) return null;
+      return [t, v];
+    })
+    .filter(Boolean);
+}
+
+function buildVelneoStockMap(velneoFiltrado, destAlmacen){
+  const m = new Map();
+  for (const r of velneoFiltrado){
+    const ean = String(r.EAN || "").trim();
+    const talla = String(r.Talla || "").trim();
+    const alm = String(destAlmacen || "").trim();
+    if (!ean || !talla || !alm) continue;
+
+    const kN = `${ean}||${talla}||${alm}||Nuevo`;
+    const kU = `${ean}||${talla}||${alm}||Usado`;
+
+    m.set(kN, (m.get(kN) || 0) + (Number(r.StockNuevo)||0));
+    m.set(kU, (m.get(kU) || 0) + (Number(r.StockUsado)||0));
+  }
+  return m;
+}
+
+function calcQueda(row, destAlmacen){
+  if (row.Almacen !== "Dif") return "";
+
+  const ean = String(row.EAN || "").trim();
+  const uso = String(row.Uso || "").trim(); // "Nuevo"|"Usado"
+  if (!ean || !uso || !destAlmacen) return "";
+
+  const pairs = parseTallasText(row.Tallas);
+  if (!pairs.length) return "";
+
+  // si solo una talla -> devolvemos número limpio (lo que quieres)
+  if (pairs.length === 1){
+    const [talla, dif] = pairs[0];
+    const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
+    const vel = Number(state.concVelneoStock.get(k) || 0);
+    const queda = vel - dif; // queda = velneo - diferencia
+    return String(queda);
+  }
+
+  // varias tallas -> resumen
+  const parts = [];
+  for (const [talla, dif] of pairs){
+    const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
+    const vel = Number(state.concVelneoStock.get(k) || 0);
+    const queda = vel - dif;
+    parts.push(`${talla}→${queda}`);
+  }
+  return parts.join(" ");
+}
+
+function renderTablaConciliacion(rows, destAlmacen){
   const wrap = $("conciliacionWrap");
   if (!wrap) return;
   wrap.innerHTML = "";
@@ -532,7 +598,8 @@ function renderTablaConciliacion(rows){
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
 
-  ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(h=>{
+  // OJO: añadimos "Queda (Velneo)"
+  ["Concepto","Descripcion","Almacen","Uso","Tallas","Total","Queda (Velneo)"].forEach(h=>{
     const th=document.createElement("th");
     th.textContent=h;
     trh.appendChild(th);
@@ -544,11 +611,17 @@ function renderTablaConciliacion(rows){
   const tbody=document.createElement("tbody");
   rows.forEach(r=>{
     const tr=document.createElement("tr");
+
     ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(k=>{
       const td=document.createElement("td");
       td.textContent = r[k] ?? "";
       tr.appendChild(td);
     });
+
+    const tdQ = document.createElement("td");
+    tdQ.textContent = calcQueda(r, destAlmacen);
+    tr.appendChild(tdQ);
+
     tbody.appendChild(tr);
   });
 
@@ -580,6 +653,7 @@ function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
   const soloDif = !!$("cSoloDif")?.checked;
   const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
+  const dest = String($("cAlmacenDestino")?.value || "").trim();
 
   let rows = state.concAll || [];
 
@@ -598,23 +672,20 @@ function applyConciliacionViewFilters(){
   }
 
   setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
-  renderTablaConciliacion(rows);
+  renderTablaConciliacion(rows, dest);
 }
 
+// mapping por uso. Regla: si destino=34, "central" SOLO en USADO.
 function buildMappingsForConciliacion(destAlmacen){
   const selTiendas = selectedChecklist("cTiendaList").map(t => String(t).trim().toLowerCase());
 
   const mapNuevo = {};
   const mapUsado = {};
 
-  // Regla fija: si destino = 34, "central" SOLO cuenta en USADO.
   const ruleExcludeCentralFromNuevo = (String(destAlmacen).trim() === "34");
 
   selTiendas.forEach(tienda=>{
-    // Usado: siempre entra
     mapUsado[tienda] = String(destAlmacen);
-
-    // Nuevo: entra salvo CENTRAL en destino 34
     if (ruleExcludeCentralFromNuevo && tienda === "central") return;
     mapNuevo[tienda] = String(destAlmacen);
   });
@@ -652,12 +723,15 @@ function runConciliacion(){
   // Velneo solo del almacén destino
   const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
 
-  // Mappings por uso (nuevo/usado)
+  // Stock Velneo para "Queda"
+  state.concVelneoStock = buildVelneoStockMap(velneoFiltrado, dest);
+
+  // Mapping por uso (nuevo/usado)
   const mappingAlmacenes = buildMappingsForConciliacion(dest);
 
   const res = generarConciliacion({
     velneoRows: velneoFiltrado,
-    tiendasRows: state.tiendas, // ya filtra dentro por mapping
+    tiendasRows: state.tiendas,
     mappingAlmacenes
   });
 
@@ -669,9 +743,9 @@ function applyPreset(destAlmacen, tiendasList){
   const sel = $("cAlmacenDestino");
   if (sel) sel.value = String(destAlmacen);
 
-  const wanted = new Set(tiendasList.map(String));
+  const wanted = new Set(tiendasList.map(v=>String(v).trim().toLowerCase()));
   document.querySelectorAll("#cTiendaList input[type=checkbox]").forEach(cb=>{
-    cb.checked = wanted.has(String(cb.value));
+    cb.checked = wanted.has(String(cb.value).trim().toLowerCase());
   });
 
   applySearchToChecklist("cTiendaSearch", "cTiendaList");
@@ -776,7 +850,7 @@ function setupUI(){
   $("cTiendaNone")?.addEventListener("click", ()=> setAll("cTiendaList", false));
 
   // Presets
-  // NOTA: dejamos marcado 99 también, pero el código lo excluye de NUEVO cuando destino=34
+  // (incluye central, pero el código la excluye de NUEVO si destino=34)
   $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7","central"]));
   $("btnPreset1")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
 
@@ -785,4 +859,3 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
-
