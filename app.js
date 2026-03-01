@@ -666,12 +666,19 @@ function fillConcTiendasChecklistFromData(){
 
 function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
+  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase(); // NUEVO
   const soloDif = !!$("cSoloDif")?.checked;
   const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
   const dest = String($("cAlmacenDestino")?.value || "").trim();
 
   let rows = state.concAll || [];
 
+  // ✅ filtro SOLO por concepto
+  if (qConcepto){
+    rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
+  }
+
+  // ✅ filtro buscar (concepto o descripcion) como ya tenías
   if (q){
     rows = rows.filter(r=>{
       const c = String(r.Concepto ?? "").toLowerCase();
@@ -679,12 +686,37 @@ function applyConciliacionViewFilters(){
       return c.includes(q) || d.includes(q);
     });
   }
+
   if (soloDif){
     rows = rows.filter(r => r.Almacen === "Dif");
   }
+
   if (usoSel){
     rows = rows.filter(r => String(r.Uso) === usoSel);
   }
+
+  // ✅ TOTAL "Queda (Velneo)" (solo filas DIF visibles)
+  let totalQueda = 0;
+  for (const r of rows){
+    if (r.Almacen !== "Dif") continue;
+
+    // calcQueda devuelve "" o "5" o "44→3 46→8"
+    const s = String(calcQueda(r, dest) || "").trim();
+    if (!s) continue;
+
+    if (/^\d+$/.test(s)){
+      totalQueda += Number(s);
+    } else {
+      // suma todos los números después de "→"
+      const matches = s.match(/→\s*(-?\d+)/g) || [];
+      for (const m of matches){
+        const n = Number(m.replace("→","").trim());
+        if (Number.isFinite(n)) totalQueda += n;
+      }
+    }
+  }
+
+  set
 
   // ✅ ORDEN VISIBLE: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
   rows = [...rows].sort((a,b)=>{
@@ -891,6 +923,8 @@ function setupUI(){
 
   // Conciliar
   $("btnConciliar")?.addEventListener("click", runConciliacion);
+  $("cConcepto")?.addEventListener("input", applyConciliacionViewFilters);
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
