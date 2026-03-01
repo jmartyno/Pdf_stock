@@ -1,6 +1,6 @@
 // modules/conciliacion.js
 // Conciliación Velneo vs CSV Tiendas
-// Salida: filas para tabla (Concepto, Descripcion, Almacen, Uso, Tallas, Total)
+// Salida: filas para tabla (EAN, Concepto, Descripcion, Almacen, Uso, Tallas, Total)
 
 (function(){
 
@@ -15,32 +15,50 @@
     map.get(k)[field] += (Number(val) || 0);
   }
 
-  // Convierte a string tipo: "44:-2 46:5 UNICO:1"
+  function tallaSortKey(t){
+    const s = norm(t);
+    const up = s.toUpperCase();
+
+    // UNICO al final
+    if (up === "UNICO" || up === "UNICA" || up === "U") return { un: 1, n: Number.POSITIVE_INFINITY, s };
+
+    // número puro
+    if (/^\d+$/.test(s)) return { un: 0, n: Number(s), s };
+
+    // empieza por número (ej: 1-XS, 2-S...)
+    const m = s.match(/^(\d+)/);
+    if (m) return { un: 0, n: Number(m[1]), s };
+
+    // resto
+    return { un: 0, n: Number.POSITIVE_INFINITY, s };
+  }
+
+  // "44:2 46:-1 UNICO:3" (orden ascendente)
   function tallasToText(mapTalla){
     const pairs = [...mapTalla.entries()]
       .filter(([,v]) => (Number(v)||0) !== 0)
+      .sort(([ta],[tb])=>{
+        const A = tallaSortKey(ta);
+        const B = tallaSortKey(tb);
+        if (A.un !== B.un) return A.un - B.un;
+        if (A.n !== B.n) return A.n - B.n;
+        return A.s.localeCompare(B.s, "es");
+      })
       .map(([t,v]) => `${t}:${v}`);
-    return pairs.join(" ");
-  }
 
-  // mappingAlmacenes puede ser:
-  // - { "3":"34", "4":"34" }  (igual para todo)
-  // - { nuevo:{...}, usado:{...} }  (distinto por uso)
-  function getMapping(mappingAlmacenes, field){
-    if (!mappingAlmacenes) return {};
-    if (mappingAlmacenes.nuevo || mappingAlmacenes.usado){
-      return mappingAlmacenes[field] || {};
-    }
-    return mappingAlmacenes;
+    return pairs.join(" ");
   }
 
   window.generarConciliacion = function({
     velneoRows,
     tiendasRows,
-    mappingAlmacenes
+    mappingAlmacenes  // puede ser { "3":"34" } o { nuevo:{}, usado:{} }
   }){
 
-    // 1) Velneo -> Map por (EAN,talla,almacen) con nuevo/usado
+    const mapNuevo = (mappingAlmacenes && mappingAlmacenes.nuevo) ? mappingAlmacenes.nuevo : (mappingAlmacenes || {});
+    const mapUsado = (mappingAlmacenes && mappingAlmacenes.usado) ? mappingAlmacenes.usado : (mappingAlmacenes || {});
+
+    // 1) Velneo -> Map (EAN,talla,almacen) con nuevo/usado
     const velneo = new Map();
     const metaByEAN = new Map(); // {concepto, descripcion}
 
@@ -50,7 +68,6 @@
 
       const almacen = norm(r.Almacen);
       const talla = norm(r.Talla);
-
       const k = key(ean, talla, almacen);
 
       add(velneo, k, "nuevo", r.StockNuevo);
@@ -64,30 +81,31 @@
       }
     });
 
-    // 2) Tiendas -> Map por (EAN,talla,almacenDestino) con nuevo/usado
+    // 2) Tiendas -> Map (EAN,talla,almacenDestino) con nuevo/usado
     const tiendas = new Map();
 
     tiendasRows.forEach(r=>{
-      const uso = norm(r.uso).toUpperCase();
-      const field = (uso === "NUEVO") ? "nuevo" : "usado";
-
       const tienda = norm(r.tienda).toLowerCase();
-      const mapUso = getMapping(mappingAlmacenes, field);
-      const almacenDestino = mapUso[tienda];
-
-      if(!almacenDestino) return;
 
       const ean = norm(r.ean);
       if (!ean) return;
 
       const talla = norm(r.talla);
-      const k = key(ean, talla, almacenDestino);
+      const uso = norm(r.uso).toUpperCase(); // NUEVO / USADO
+      const field = (uso === "NUEVO") ? "nuevo" : "usado";
 
+      const almacenDestino = (field === "nuevo")
+        ? mapNuevo[tienda]
+        : mapUsado[tienda];
+
+      if(!almacenDestino) return;
+
+      const k = key(ean, talla, String(almacenDestino));
       add(tiendas, k, field, r.unidades);
     });
 
-    // 3) Agregación final por (EAN, almacen, uso) con tallas en mapa
-    const group = new Map(); // gkey -> {meta, uso, almacen, V:MapTalla, T:MapTalla, D:MapTalla}
+    // 3) Agregación por (EAN, almacen, uso) con tallas en Map
+    const group = new Map(); // gkey -> {ean, meta, uso, almacen, V,T,D}
 
     function gkey(ean, almacen, uso){
       return `${ean}||${almacen}||${uso}`;
@@ -111,9 +129,10 @@
         const GK = gkey(ean, almacen, uso);
         if(!group.has(GK)){
           group.set(GK, {
+            ean,
             concepto: m.concepto,
             descripcion: m.descripcion,
-            almacen: almacen,
+            almacen,
             uso: (uso === "nuevo" ? "Nuevo" : "Usado"),
             V: new Map(),
             T: new Map(),
@@ -144,6 +163,7 @@
 
       if (totalV !== 0){
         resultado.push({
+          EAN: it.ean,
           Concepto: it.concepto,
           Descripcion: it.descripcion,
           Almacen: it.almacen,
@@ -155,6 +175,7 @@
 
       if (totalT !== 0){
         resultado.push({
+          EAN: it.ean,
           Concepto: it.concepto,
           Descripcion: it.descripcion,
           Almacen: "CSV",
@@ -166,6 +187,7 @@
 
       if (totalD !== 0){
         resultado.push({
+          EAN: it.ean,
           Concepto: it.concepto,
           Descripcion: it.descripcion,
           Almacen: "Dif",
@@ -176,7 +198,6 @@
       }
     }
 
-    // Orden: Concepto/Desc/uso y que Dif quede visible
     resultado.sort((a,b)=>{
       const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
       const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
