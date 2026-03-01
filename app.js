@@ -666,19 +666,19 @@ function fillConcTiendasChecklistFromData(){
 
 function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
-  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase(); // NUEVO
+  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase(); // filtro SOLO concepto
   const soloDif = !!$("cSoloDif")?.checked;
   const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
   const dest = String($("cAlmacenDestino")?.value || "").trim();
 
   let rows = state.concAll || [];
 
-  // ✅ filtro SOLO por concepto
+  // filtro SOLO por concepto
   if (qConcepto){
     rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
   }
 
-  // ✅ filtro buscar (concepto o descripcion) como ya tenías
+  // filtro buscar (concepto o descripcion)
   if (q){
     rows = rows.filter(r=>{
       const c = String(r.Concepto ?? "").toLowerCase();
@@ -695,19 +695,17 @@ function applyConciliacionViewFilters(){
     rows = rows.filter(r => String(r.Uso) === usoSel);
   }
 
-  // ✅ TOTAL "Queda (Velneo)" (solo filas DIF visibles)
+  // TOTAL "Queda (Velneo)" (solo filas DIF visibles)
   let totalQueda = 0;
   for (const r of rows){
     if (r.Almacen !== "Dif") continue;
 
-    // calcQueda devuelve "" o "5" o "44→3 46→8"
     const s = String(calcQueda(r, dest) || "").trim();
     if (!s) continue;
 
-    if (/^\d+$/.test(s)){
+    if (/^-?\d+$/.test(s)){
       totalQueda += Number(s);
     } else {
-      // suma todos los números después de "→"
       const matches = s.match(/→\s*(-?\d+)/g) || [];
       for (const m of matches){
         const n = Number(m.replace("→","").trim());
@@ -716,8 +714,7 @@ function applyConciliacionViewFilters(){
     }
   }
 
-
-  // ✅ ORDEN VISIBLE: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
+  // ORDEN VISIBLE: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
   rows = [...rows].sort((a,b)=>{
     const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
     const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
@@ -913,6 +910,7 @@ function setupUI(){
   $("cQ")?.addEventListener("input", applyConciliacionViewFilters);
   $("cSoloDif")?.addEventListener("change", applyConciliacionViewFilters);
   $("cUso")?.addEventListener("change", applyConciliacionViewFilters);
+  $("cConcepto")?.addEventListener("input", applyConciliacionViewFilters);
 
   // Tiendas checklist
   $("cTiendaSearch")?.addEventListener("input", ()=> applySearchToChecklist("cTiendaSearch","cTiendaList"));
@@ -925,9 +923,6 @@ function setupUI(){
 
   // Conciliar
   $("btnConciliar")?.addEventListener("click", runConciliacion);
-  $("cConcepto")?.addEventListener("input", applyConciliacionViewFilters);
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
-
-
