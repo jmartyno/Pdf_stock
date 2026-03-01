@@ -716,7 +716,6 @@ function applyConciliacionViewFilters(){
     }
   }
 
-  set
 
   // ✅ ORDEN VISIBLE: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
   rows = [...rows].sort((a,b)=>{
@@ -735,7 +734,10 @@ function applyConciliacionViewFilters(){
     return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
   });
 
-  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
+  setText(
+    "cMeta",
+    `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length}) | Total Queda: ${totalQueda}`
+  );
   renderTablaConciliacion(rows, dest);
 }
 
@@ -927,4 +929,5 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
 
