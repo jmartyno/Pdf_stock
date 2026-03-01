@@ -1,5 +1,15 @@
 // app.js
 // Stock por tallas: CSV local -> pivot con tallas en columnas + filtros + print
+
+window.addEventListener("error", (e) => {
+  console.error(e);
+  alert("❌ JS: " + (e.message || "error"));
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error(e);
+  alert("❌ PROMESA: " + (e.reason?.message || String(e.reason || "error")));
+});
+
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -22,7 +32,7 @@ function setText(id, txt){
 
 function normalizeKey(s){
   return String(s ?? "")
-    .replace(/\uFEFF/g, "")          // quita BOM
+    .replace(/\uFEFF/g, "")
     .trim()
     .toLowerCase()
     .replaceAll("á","a").replaceAll("é","e").replaceAll("í","i").replaceAll("ó","o").replaceAll("ú","u")
@@ -53,7 +63,7 @@ function sortTallas(list){
 
   arr.sort((a,b)=>{
     const au = isUnico(a), bu = isUnico(b);
-    if (au && !bu) return 1;     // UNICO al final
+    if (au && !bu) return 1;
     if (!au && bu) return -1;
 
     const an=isNumericTalla(a), bn=isNumericTalla(b);
@@ -583,9 +593,9 @@ function calcQueda(row, destAlmacen){
   return parts.join(" ");
 }
 
-/* --- ORDEN ASC por talla (para DIF/CSV/Velneo) --- */
+/* --- ORDEN ASC por talla (para filas) --- */
 function tallaKeyFromRow(r){
-  const tallas = String(r?.Tallas || "").trim();     // ej: "70:1"
+  const tallas = String(r?.Tallas || "").trim(); // ej: "70:1"
   const talla = tallas.split(/\s+/)[0]?.split(":")[0]?.trim() || "";
   const low = talla.toLowerCase();
 
@@ -666,19 +676,17 @@ function fillConcTiendasChecklistFromData(){
 
 function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
-  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase(); // filtro SOLO concepto
+  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase();
   const soloDif = !!$("cSoloDif")?.checked;
   const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
   const dest = String($("cAlmacenDestino")?.value || "").trim();
 
   let rows = state.concAll || [];
 
-  // filtro SOLO por concepto
   if (qConcepto){
     rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
   }
 
-  // filtro buscar (concepto o descripcion)
   if (q){
     rows = rows.filter(r=>{
       const c = String(r.Concepto ?? "").toLowerCase();
@@ -695,11 +703,10 @@ function applyConciliacionViewFilters(){
     rows = rows.filter(r => String(r.Uso) === usoSel);
   }
 
-  // TOTAL "Queda (Velneo)" (solo filas DIF visibles)
+  // Total de "Queda (Velneo)" en lo visible (solo filas DIF)
   let totalQueda = 0;
   for (const r of rows){
     if (r.Almacen !== "Dif") continue;
-
     const s = String(calcQueda(r, dest) || "").trim();
     if (!s) continue;
 
@@ -714,7 +721,7 @@ function applyConciliacionViewFilters(){
     }
   }
 
-  // ORDEN VISIBLE: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
+  // ORDEN: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
   rows = [...rows].sort((a,b)=>{
     const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
     const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
@@ -731,10 +738,7 @@ function applyConciliacionViewFilters(){
     return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
   });
 
-  setText(
-    "cMeta",
-    `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length}) | Total Queda: ${totalQueda}`
-  );
+  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length}) | Total queda: ${totalQueda}`);
   renderTablaConciliacion(rows, dest);
 }
 
@@ -757,52 +761,53 @@ function buildMappingsForConciliacion(destAlmacen){
 }
 
 function runConciliacion(){
-  if (typeof generarConciliacion !== "function"){
-    alert("Falta cargar modules/conciliacion.js antes que app.js");
-    return;
-  }
-  if (!state.velneo.length){
-    alert("Carga primero el CSV de Velneo.");
-    return;
-  }
-  if (!state.tiendas.length){
-    alert("Carga primero los CSV de Tiendas.");
-    return;
-  }
+  try{
+    if (typeof generarConciliacion !== "function"){
+      alert("Falta cargar modules/conciliacion.js antes que app.js");
+      return;
+    }
+    if (!state.velneo.length){
+      alert("Carga primero el CSV de Velneo.");
+      return;
+    }
+    if (!state.tiendas.length){
+      alert("Carga primero los CSV de Tiendas.");
+      return;
+    }
 
-  const dest = String($("cAlmacenDestino")?.value || "").trim();
-  if (!dest){
-    alert("Selecciona Almacén destino (Velneo).");
-    return;
-  }
+    const dest = String($("cAlmacenDestino")?.value || "").trim();
+    if (!dest){
+      alert("Selecciona Almacén destino (Velneo).");
+      return;
+    }
 
-  const totalTiendas = document.querySelectorAll("#cTiendaList input").length;
-  const tiendasSel = selectedChecklist("cTiendaList");
-  if (totalTiendas > 0 && tiendasSel.length === 0){
-    alert("Selecciona al menos una tienda para sumar.");
-    return;
-  }
+    const totalTiendas = document.querySelectorAll("#cTiendaList input").length;
+    const tiendasSel = selectedChecklist("cTiendaList");
+    if (totalTiendas > 0 && tiendasSel.length === 0){
+      alert("Selecciona al menos una tienda para sumar.");
+      return;
+    }
 
-  // Velneo solo del almacén destino
-  const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
+    const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
+    state.concVelneoStock = buildVelneoStockMap(velneoFiltrado, dest);
 
-  // Stock Velneo para "Queda"
-  state.concVelneoStock = buildVelneoStockMap(velneoFiltrado, dest);
+    const mappingAlmacenes = buildMappingsForConciliacion(dest);
 
-  // Mapping por uso (nuevo/usado)
-  const mappingAlmacenes = buildMappingsForConciliacion(dest);
+    const res = generarConciliacion({
+      velneoRows: velneoFiltrado,
+      tiendasRows: state.tiendas,
+      mappingAlmacenes
+    });
 
-  const res = generarConciliacion({
-    velneoRows: velneoFiltrado,
-    tiendasRows: state.tiendas,
-    mappingAlmacenes
-  });
+    state.concAll = res;
+    applyConciliacionViewFilters();
 
-  state.concAll = res;
-  applyConciliacionViewFilters();
-
-  if (res.length && !res[0].EAN){
-    alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh y revisa el archivo modules/conciliacion.js.");
+    if (res.length && !res[0].EAN){
+      alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas).");
+    }
+  }catch(err){
+    console.error(err);
+    alert("❌ Conciliar: " + (err?.message || String(err)));
   }
 }
 
@@ -908,17 +913,17 @@ function setupUI(){
 
   // Conciliación: filtros vista
   $("cQ")?.addEventListener("input", applyConciliacionViewFilters);
+  $("cConcepto")?.addEventListener("input", applyConciliacionViewFilters);
   $("cSoloDif")?.addEventListener("change", applyConciliacionViewFilters);
   $("cUso")?.addEventListener("change", applyConciliacionViewFilters);
-  $("cConcepto")?.addEventListener("input", applyConciliacionViewFilters);
 
   // Tiendas checklist
   $("cTiendaSearch")?.addEventListener("input", ()=> applySearchToChecklist("cTiendaSearch","cTiendaList"));
   $("cTiendaAll")?.addEventListener("click", ()=> setAll("cTiendaList", true));
   $("cTiendaNone")?.addEventListener("click", ()=> setAll("cTiendaList", false));
 
-  // Presets (incluye central; el código la excluye de NUEVO si destino=34)
-  $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["3","4","7","central"]));
+  // Presets
+  $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["ayala","hermosilla","cea","central"]));
   $("btnPreset1")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
 
   // Conciliar
