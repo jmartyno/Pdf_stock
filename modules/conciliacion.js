@@ -45,14 +45,38 @@
 
   // Convierte Map talla->valor a string "44:2 46:-1 UNICO:1" (ASC)
   function tallasToText(mapTalla){
-    const tallas = sortTallasAsc([...mapTalla.keys()]);
-    const parts = [];
-    for (const t of tallas){
-      const v = Number(mapTalla.get(t) || 0);
-      if (v !== 0) parts.push(`${t}:${v}`);
-    }
-    return parts.join(" ");
-  }
+  const entries = [...mapTalla.entries()]
+    .map(([t,v]) => [String(t).trim(), Number(v)||0])
+    .filter(([,v]) => v !== 0);
+
+  const isUnico = (s)=>{
+    const v = String(s).trim().toLowerCase();
+    return v === "unico" || v === "único" || v === "u" || v === "unica" || v === "única";
+  };
+
+  const numVal = (s)=>{
+    // saca el primer número que encuentre (vale para "70", "70-", "70 XL", etc.)
+    const m = String(s).match(/\d+/);
+    return m ? Number(m[0]) : NaN;
+  };
+
+  entries.sort(([ta],[tb])=>{
+    const au=isUnico(ta), bu=isUnico(tb);
+    if (au && !bu) return 1;
+    if (!au && bu) return -1;
+
+    const na = numVal(ta), nb = numVal(tb);
+    const aNum = Number.isFinite(na), bNum = Number.isFinite(nb);
+
+    if (aNum && bNum) return na - nb;     // ✅ ASC
+    if (aNum && !bNum) return -1;
+    if (!aNum && bNum) return 1;
+
+    return ta.localeCompare(tb, "es");
+  });
+
+  return entries.map(([t,v]) => `${t}:${v}`).join(" ");
+}
 
   window.generarConciliacion = function({
     velneoRows,
