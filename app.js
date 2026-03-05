@@ -595,20 +595,30 @@ function tallaKeyFromRow(r){
 }
 
 function renderTablaConciliacion(rows, destAlmacen){
-  const wrap = $("conciliacionWrap");
-  if (!wrap) return;
-  wrap.innerHTML = "";
 
-  if(!rows || !rows.length){
-    wrap.textContent = "Sin diferencias.";
+  const wrap=$("conciliacionWrap");
+  wrap.innerHTML="";
+
+  if(!rows.length){
+    wrap.textContent="Sin datos.";
     return;
   }
 
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  const trh = document.createElement("tr");
+  const table=document.createElement("table");
 
-  ["Concepto","Descripcion","Almacen","Uso","Tallas","Total","Queda (Velneo)"].forEach(h=>{
+  const thead=document.createElement("thead");
+  const trh=document.createElement("tr");
+
+  [
+    "Concepto",
+    "Descripcion",
+    "Almacen",
+    "Uso",
+    "Tallas",
+    "CSV Velneo",
+    "CSV Tiendas",
+    "Total Stock Velneo"
+  ].forEach(h=>{
     const th=document.createElement("th");
     th.textContent=h;
     trh.appendChild(th);
@@ -618,25 +628,43 @@ function renderTablaConciliacion(rows, destAlmacen){
   table.appendChild(thead);
 
   const tbody=document.createElement("tbody");
+
   rows.forEach(r=>{
+
     const tr=document.createElement("tr");
 
-    ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(k=>{
+    const velneo = r.Almacen===destAlmacen ? r.Total : "";
+    const tiendas = r.Almacen==="CSV" ? r.Total : "";
+    const dif = r.Almacen==="Dif" ? r.Total : "";
+
+    [
+      r.Concepto,
+      r.Descripcion,
+      r.Almacen,
+      r.Uso,
+      r.Tallas,
+      velneo,
+      tiendas,
+      dif
+    ].forEach(v=>{
       const td=document.createElement("td");
-      td.textContent = r[k] ?? "";
+      td.textContent=v;
       tr.appendChild(td);
     });
 
-    const tdQ = document.createElement("td");
-    tdQ.textContent = calcQueda(r, destAlmacen);
-    tr.appendChild(tdQ);
+    if(r.Almacen==="Dif"){
+      tr.style.background = r.Total>0 ? "#d4f7d4" : "#ffd6d6";
+    }
 
     tbody.appendChild(tr);
+
   });
 
   table.appendChild(tbody);
   wrap.appendChild(table);
+
 }
+
 
 function fillConcAlmacenDestinoOptions(almacenesVelneo){
   const sel = $("cAlmacenDestino");
@@ -918,3 +946,4 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
