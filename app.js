@@ -10,9 +10,7 @@ const state = {
   velneo: [],
   tiendas: [],
   concAll: [],
-  concTiendasList: [],
-
-  concVelneoStock: new Map() // para "Queda (Velneo)"
+  concTiendasList: []
 };
 
 function setText(id, txt){
@@ -22,7 +20,7 @@ function setText(id, txt){
 
 function normalizeKey(s){
   return String(s ?? "")
-    .replace(/\uFEFF/g, "")          // quita BOM
+    .replace(/\uFEFF/g, "")
     .trim()
     .toLowerCase()
     .replaceAll("á","a").replaceAll("é","e").replaceAll("í","i").replaceAll("ó","o").replaceAll("ú","u")
@@ -53,7 +51,7 @@ function sortTallas(list){
 
   arr.sort((a,b)=>{
     const au = isUnico(a), bu = isUnico(b);
-    if (au && !bu) return 1;     // UNICO al final
+    if (au && !bu) return 1;
     if (!au && bu) return -1;
 
     const an=isNumericTalla(a), bn=isNumericTalla(b);
@@ -196,7 +194,7 @@ function rowTotal(mapTalla){
 function fmtCell(v, hideZeros){
   const n = Number(v) || 0;
   if (hideZeros && n === 0) return "";
-  return Number.isInteger(n) ? String(n) : String(n);
+  return String(n);
 }
 
 function tdLeft(text, muted=false){
@@ -245,8 +243,8 @@ function makeTablePivot(pivot, opts){
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-
   let alt = false;
+
   for (const it of items){
     const totalN = rowTotal(it.byTallaNuevo);
     const totalU = rowTotal(it.byTallaUsado);
@@ -521,106 +519,35 @@ function parseTiendasCSV(text){
   });
 }
 
-/* --- helpers para "Queda (Velneo)" --- */
-function parseTallasText(s){
-  return String(s||"")
-    .split(/\s+/)
-    .map(x => x.trim())
-    .filter(Boolean)
-    .map(pair=>{
-      const i = pair.lastIndexOf(":");
-      if (i < 0) return null;
-      const t = pair.slice(0,i).trim();
-      const v = Number(pair.slice(i+1).trim());
-      if (!t || !Number.isFinite(v)) return null;
-      return [t, v];
-    })
-    .filter(Boolean);
-}
+function renderTablaConciliacion(rows){
+  const wrap = $("conciliacionWrap");
+  if (!wrap) return;
+  wrap.innerHTML = "";
 
-function buildVelneoStockMap(velneoFiltrado, destAlmacen){
-  const m = new Map();
-  for (const r of velneoFiltrado){
-    const ean = String(r.EAN || "").trim();
-    const talla = String(r.Talla || "").trim();
-    const alm = String(destAlmacen || "").trim();
-    if (!ean || !talla || !alm) continue;
-
-    const kN = `${ean}||${talla}||${alm}||Nuevo`;
-    const kU = `${ean}||${talla}||${alm}||Usado`;
-
-    m.set(kN, (m.get(kN) || 0) + (Number(r.StockNuevo)||0));
-    m.set(kU, (m.get(kU) || 0) + (Number(r.StockUsado)||0));
-  }
-  return m;
-}
-
-function calcQueda(row, destAlmacen){
-  if (row.Almacen !== "Dif") return "";
-
-  const ean = String(row.EAN || "").trim();
-  const uso = String(row.Uso || "").trim(); // "Nuevo"|"Usado"
-  if (!ean || !uso || !destAlmacen) return "";
-
-  const pairs = parseTallasText(row.Tallas);
-  if (!pairs.length) return "";
-
-  if (pairs.length === 1){
-    const [talla, dif] = pairs[0];
-    const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
-    const vel = Number(state.concVelneoStock.get(k) || 0);
-    const queda = vel - dif;
-    return String(queda);
-  }
-
-  const parts = [];
-  for (const [talla, dif] of pairs){
-    const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
-    const vel = Number(state.concVelneoStock.get(k) || 0);
-    const queda = vel - dif;
-    parts.push(`${talla}→${queda}`);
-  }
-  return parts.join(" ");
-}
-
-function tallaKeyFromRow(r){
-  const tallas = String(r?.Tallas || "").trim();
-  const talla = tallas.split(/\s+/)[0]?.split(":")[0]?.trim() || "";
-  const low = talla.toLowerCase();
-
-  if (["unico","único","u","unica","única"].includes(low)) return 999999;
-
-  const m = talla.match(/\d+/);
-  return m ? Number(m[0]) : 999998;
-}
-
-function renderTablaConciliacion(rows, destAlmacen){
-
-  const wrap=$("conciliacionWrap");
-  wrap.innerHTML="";
-
-  if(!rows.length){
-    wrap.textContent="Sin datos.";
+  if(!rows || !rows.length){
+    wrap.textContent = "Sin líneas.";
     return;
   }
 
-  const table=document.createElement("table");
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
 
-  const thead=document.createElement("thead");
-  const trh=document.createElement("tr");
+  const cols = [
+    {k:"Concepto",      t:"Concepto",          w:"8ch"},
+    {k:"Descripcion",   t:"Descripcion",       w:"25ch"},
+    {k:"Almacen",       t:"Almacen",           w:"8ch"},
+    {k:"Uso",           t:"Uso",               w:"8ch"},
+    {k:"Talla",         t:"Tallas",            w:"8ch"},
+    {k:"CSVVelneo",     t:"CSV Velneo",        w:"6ch"},
+    {k:"CSVTiendas",    t:"CSV Tiendas",       w:"6ch"},
+    {k:"TotalStockVelneo", t:"Total Stock Velneo", w:"10ch"}
+  ];
 
-  [
-    "Concepto",
-    "Descripcion",
-    "Almacen",
-    "Uso",
-    "Tallas",
-    "CSV Velneo",
-    "CSV Tiendas",
-    "Total Stock Velneo"
-  ].forEach(h=>{
+  cols.forEach(c=>{
     const th=document.createElement("th");
-    th.textContent=h;
+    th.textContent = c.t;
+    th.style.width = c.w;
     trh.appendChild(th);
   });
 
@@ -629,42 +556,72 @@ function renderTablaConciliacion(rows, destAlmacen){
 
   const tbody=document.createElement("tbody");
 
-  rows.forEach(r=>{
+  let sumV=0, sumT=0, sumD=0;
 
+  rows.forEach(r=>{
     const tr=document.createElement("tr");
 
-    const velneo = r.Almacen===destAlmacen ? r.Total : "";
-    const tiendas = r.Almacen==="CSV" ? r.Total : "";
-    const dif = r.Almacen==="Dif" ? r.Total : "";
+    const v = Number(r.CSVVelneo||0);
+    const t = Number(r.CSVTiendas||0);
+    const d = Number(r.TotalStockVelneo||0);
 
-    [
-      r.Concepto,
-      r.Descripcion,
-      r.Almacen,
-      r.Uso,
-      r.Tallas,
-      velneo,
-      tiendas,
-      dif
-    ].forEach(v=>{
+    sumV += v; sumT += t; sumD += d;
+
+    cols.forEach(c=>{
       const td=document.createElement("td");
-      td.textContent=v;
+
+      let val = r[c.k];
+      if (c.k === "CSVVelneo" || c.k === "CSVTiendas" || c.k === "TotalStockVelneo"){
+        val = String(Number(val||0));
+        td.classList.add("num");
+      }
+
+      td.textContent = (val ?? "");
+
+      // color diff
+      if (c.k === "TotalStockVelneo"){
+        if (d > 0) td.style.background = "#d9f7d9";      // verde claro
+        else if (d < 0) td.style.background = "#ffd9d9"; // rojo claro
+      }
+
       tr.appendChild(td);
     });
 
-    if(r.Almacen==="Dif"){
-      tr.style.background = r.Total>0 ? "#d4f7d4" : "#ffd6d6";
-    }
-
     tbody.appendChild(tr);
-
   });
+
+  // fila totals
+  const trTot = document.createElement("tr");
+  trTot.classList.add("totalRow");
+
+  const td1 = document.createElement("td");
+  td1.textContent = "TOTAL";
+  td1.colSpan = 5;
+  td1.style.fontWeight = "700";
+  trTot.appendChild(td1);
+
+  const tdV = document.createElement("td");
+  tdV.textContent = String(sumV);
+  tdV.style.fontWeight = "700";
+  trTot.appendChild(tdV);
+
+  const tdT = document.createElement("td");
+  tdT.textContent = String(sumT);
+  tdT.style.fontWeight = "700";
+  trTot.appendChild(tdT);
+
+  const tdD = document.createElement("td");
+  tdD.textContent = String(sumD);
+  tdD.style.fontWeight = "700";
+  if (sumD > 0) tdD.style.background = "#d9f7d9";
+  else if (sumD < 0) tdD.style.background = "#ffd9d9";
+  trTot.appendChild(tdD);
+
+  tbody.appendChild(trTot);
 
   table.appendChild(tbody);
   wrap.appendChild(table);
-
 }
-
 
 function fillConcAlmacenDestinoOptions(almacenesVelneo){
   const sel = $("cAlmacenDestino");
@@ -695,8 +652,7 @@ function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
   const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase();
   const soloDif = !!$("cSoloDif")?.checked;
-  const usoSel = String($("cUso")?.value || "").trim();
-  const dest = String($("cAlmacenDestino")?.value || "").trim();
+  const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
 
   let rows = state.concAll || [];
 
@@ -712,51 +668,20 @@ function applyConciliacionViewFilters(){
     });
   }
 
-  if (soloDif){
-    rows = rows.filter(r => r.Almacen === "Dif");
-  }
-
   if (usoSel){
     rows = rows.filter(r => String(r.Uso) === usoSel);
   }
 
-  // TOTAL "Queda" solo de filas DIF visibles
-  let totalQueda = 0;
-  for (const r of rows){
-    if (r.Almacen !== "Dif") continue;
-    const s = String(calcQueda(r, dest) || "").trim();
-    if (!s) continue;
-
-    if (/^-?\d+(\.\d+)?$/.test(s)){
-      totalQueda += Number(s);
-    } else {
-      const matches = s.match(/→\s*(-?\d+)/g) || [];
-      for (const m of matches){
-        const n = Number(m.replace("→","").trim());
-        if (Number.isFinite(n)) totalQueda += n;
-      }
-    }
+  // "Solo diferencias" ahora = diff != 0
+  if (soloDif){
+    rows = rows.filter(r => Number(r.TotalStockVelneo || 0) !== 0);
   }
 
-  // ORDEN VISIBLE
-  rows = [...rows].sort((a,b)=>{
-    const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
-    const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
-    if (ak !== bk) return ak.localeCompare(bk, "es");
+  // total diff visible
+  const totalDiff = rows.reduce((acc,r)=> acc + Number(r.TotalStockVelneo||0), 0);
 
-    const prio = (x)=> x.Almacen==="Dif" ? 0 : (x.Almacen==="CSV" ? 1 : 2);
-    const pa = prio(a), pb = prio(b);
-    if (pa !== pb) return pa - pb;
-
-    const ta = tallaKeyFromRow(a);
-    const tb = tallaKeyFromRow(b);
-    if (ta !== tb) return ta - tb;
-
-    return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
-  });
-
-  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length}) | Total Queda: ${totalQueda}`);
-  renderTablaConciliacion(rows, dest);
+  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length}) | Total diff: ${totalDiff}`);
+  renderTablaConciliacion(rows);
 }
 
 // mapping por uso. Regla: si destino=34, "central" SOLO en USADO.
@@ -770,7 +695,6 @@ function buildMappingsForConciliacion(destAlmacen){
 
   selTiendas.forEach(tienda=>{
     const t = String(tienda).trim().toLowerCase();
-
     mapUsado[t] = String(destAlmacen);
     if (ruleExcludeCentralFromNuevo && t === "central") return;
     mapNuevo[t] = String(destAlmacen);
@@ -806,9 +730,8 @@ function runConciliacion(){
     return;
   }
 
+  // Velneo solo del almacén destino
   const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
-
-  state.concVelneoStock = buildVelneoStockMap(velneoFiltrado, dest);
 
   const mappingAlmacenes = buildMappingsForConciliacion(dest);
 
@@ -820,10 +743,6 @@ function runConciliacion(){
 
   state.concAll = res;
   applyConciliacionViewFilters();
-
-  if (res.length && !res[0].EAN){
-    alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh y revisa el archivo modules/conciliacion.js.");
-  }
 }
 
 function applyPreset(destAlmacen, tiendasList){
@@ -946,4 +865,3 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
-
