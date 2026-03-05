@@ -4,6 +4,11 @@
   --bg2:#f6f8fa;
   --txt:#111;
   --muted:#57606a;
+
+  /* ✅ NUEVO: colores para “zebra” y hover */
+  --rowA:#ffffff;
+  --rowB:#fafafa;
+  --rowHover:#f1f7ff;
 }
 
 *{ box-sizing:border-box; }
@@ -162,6 +167,18 @@ tr.alt td{ background:#fbfcfd; }
   white-space:nowrap;
 }
 
+/* ✅ NUEVO: CONCILIACIÓN más legible (zebra + hover + Tallas más grande) */
+#conciliacionWrap tbody tr:nth-child(odd){ background: var(--rowB); }
+#conciliacionWrap tbody tr:nth-child(even){ background: var(--rowA); }
+#conciliacionWrap tbody tr:hover{ background: var(--rowHover); }
+
+/* Tallas = 5ª columna (ajusta si cambias el orden de columnas) */
+#conciliacionWrap th:nth-child(5),
+#conciliacionWrap td:nth-child(5){
+  font-size:13.5px;   /* un pelín más grande que 12px */
+  font-weight:700;
+}
+
 /* ===== PRINT / PDF ===== */
 @page{
   size: A4 landscape;
@@ -172,5 +189,7 @@ tr.alt td{ background:#fbfcfd; }
   .tableWrap{ overflow:visible; border:none; }
   th{ position:static; }
   body{ background:#fff; }
-}
 
+  /* En impresión, quita hover y deja zebra suave */
+  #conciliacionWrap tbody tr:hover{ background: transparent; }
+}
