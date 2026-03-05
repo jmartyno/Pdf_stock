@@ -1,12 +1,7 @@
 // app.js
 // Stock por tallas: CSV local -> pivot con tallas en columnas + filtros + print
 const $ = (id) => document.getElementById(id);
-window.addEventListener("error", (e) => {
-  alert("❌ JS ERROR: " + (e.message || "error") + (e.filename ? "\n" + e.filename : "") + (e.lineno ? ":" + e.lineno : ""));
-});
-window.addEventListener("unhandledrejection", (e) => {
-  alert("❌ PROMESA: " + (e.reason?.message || String(e.reason || "error")));
-});
+
 const state = {
   rows: [],
   grupos: [],
@@ -598,31 +593,22 @@ function tallaKeyFromRow(r){
   const m = talla.match(/\d+/);
   return m ? Number(m[0]) : 999998;
 }
+
 function renderTablaConciliacion(rows, destAlmacen){
+  const wrap = $("conciliacionWrap");
+  if (!wrap) return;
+  wrap.innerHTML = "";
 
-  const wrap=$("conciliacionWrap");
-  wrap.innerHTML="";
-
-  if(!rows.length){
-    wrap.textContent="Sin datos.";
+  if(!rows || !rows.length){
+    wrap.textContent = "Sin diferencias.";
     return;
   }
 
-  const table=document.createElement("table");
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
 
-  const thead=document.createElement("thead");
-  const trh=document.createElement("tr");
-
-  [
-    "Concepto",
-    "Descripcion",
-    "Almacen",
-    "Uso",
-    "Tallas",
-    "CSV Velneo",
-    "CSV Tiendas",
-    "Total Stock Velneo"
-  ].forEach(h=>{
+  ["Concepto","Descripcion","Almacen","Uso","Tallas","Total","Queda (Velneo)"].forEach(h=>{
     const th=document.createElement("th");
     th.textContent=h;
     trh.appendChild(th);
@@ -632,43 +618,25 @@ function renderTablaConciliacion(rows, destAlmacen){
   table.appendChild(thead);
 
   const tbody=document.createElement("tbody");
-
   rows.forEach(r=>{
-
     const tr=document.createElement("tr");
 
-    const velneo = r.Almacen===destAlmacen ? r.Total : "";
-    const tiendas = r.Almacen==="CSV" ? r.Total : "";
-    const dif = r.Almacen==="Dif" ? r.Total : "";
-
-    [
-      r.Concepto,
-      r.Descripcion,
-      r.Almacen,
-      r.Uso,
-      r.Tallas,
-      velneo,
-      tiendas,
-      dif
-    ].forEach(v=>{
+    ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(k=>{
       const td=document.createElement("td");
-      td.textContent=v;
+      td.textContent = r[k] ?? "";
       tr.appendChild(td);
     });
 
-    if(r.Almacen==="Dif"){
-      tr.style.background = r.Total>0 ? "#d4f7d4" : "#ffd6d6";
-    }
+    const tdQ = document.createElement("td");
+    tdQ.textContent = calcQueda(r, destAlmacen);
+    tr.appendChild(tdQ);
 
     tbody.appendChild(tr);
-
   });
 
   table.appendChild(tbody);
   wrap.appendChild(table);
-
 }
-
 
 function fillConcAlmacenDestinoOptions(almacenesVelneo){
   const sel = $("cAlmacenDestino");
@@ -784,16 +752,8 @@ function buildMappingsForConciliacion(destAlmacen){
 }
 
 function runConciliacion(){
-  // DEBUG: ver que el click llega
-  console.log("▶ runConciliacion()", {
-    hasFn: typeof generarConciliacion,
-    velneo: state.velneo.length,
-    tiendas: state.tiendas.length,
-    dest: String($("cAlmacenDestino")?.value || "").trim()
-  });
-
   if (typeof generarConciliacion !== "function"){
-    alert("Falta cargar modules/conciliacion.js (generarConciliacion no existe). Revisa ruta/404/caché.");
+    alert("Falta cargar modules/conciliacion.js antes que app.js");
     return;
   }
   if (!state.velneo.length){
@@ -819,34 +779,24 @@ function runConciliacion(){
   }
 
   const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
-  console.log("velneoFiltrado", velneoFiltrado.length);
 
   state.concVelneoStock = buildVelneoStockMap(velneoFiltrado, dest);
 
   const mappingAlmacenes = buildMappingsForConciliacion(dest);
-  console.log("mappingAlmacenes", mappingAlmacenes);
 
-  try{
-    const res = generarConciliacion({
-      velneoRows: velneoFiltrado,
-      tiendasRows: state.tiendas,
-      mappingAlmacenes
-    });
+  const res = generarConciliacion({
+    velneoRows: velneoFiltrado,
+    tiendasRows: state.tiendas,
+    mappingAlmacenes
+  });
 
-    console.log("✅ conciliacion OK", res.length, res[0]);
+  state.concAll = res;
+  applyConciliacionViewFilters();
 
-    state.concAll = res || [];
-    applyConciliacionViewFilters();
-
-    if (state.concAll.length && !state.concAll[0].EAN){
-      alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh.");
-    }
-  }catch(err){
-    console.error(err);
-    alert("❌ Error dentro de generarConciliacion(): " + (err?.message || String(err)));
+  if (res.length && !res[0].EAN){
+    alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh y revisa el archivo modules/conciliacion.js.");
   }
 }
-
 
 function applyPreset(destAlmacen, tiendasList){
   const sel = $("cAlmacenDestino");
@@ -968,5 +918,3 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
-
-
