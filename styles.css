@@ -193,3 +193,14 @@ tr.alt td{ background:#fbfcfd; }
   /* En impresión, quita hover y deja zebra suave */
   #conciliacionWrap tbody tr:hover{ background: transparent; }
 }
+/* ✅ CONCILIACIÓN: zebra real (aplicado a TD para que se vea siempre) */
+#conciliacionWrap table tbody tr:nth-child(odd)  td { background:#fafafa; }
+#conciliacionWrap table tbody tr:nth-child(even) td { background:#ffffff; }
+#conciliacionWrap table tbody tr:hover td { background:#f1f7ff; }
+
+/* ✅ Tallas más grande (columna 5) */
+#conciliacionWrap table th:nth-child(5),
+#conciliacionWrap table td:nth-child(5){
+  font-size:14px;
+  font-weight:800;
+}
