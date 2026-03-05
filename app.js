@@ -11,6 +11,7 @@ const state = {
   tiendas: [],
   concAll: [],
   concTiendasList: [],
+  concViewRows: [] // <-- filas visibles (para marcar todas)
 };
 
 function setText(id, txt){
@@ -466,7 +467,7 @@ function parseVelneoCSV(text){
   };
 
   const iConcepto = pickIdx("Concepto");
-  const iDesc     = pickIdx("Descripcion", "Descripción", "Concepto -> Descripción", "Concepto -> Descripci�n", "Descripci�n");
+  const iDesc     = pickIdx("Descripcion", "Descripción", "Descripci�n");
   const iTalla    = pickIdx("Talla");
   const iEAN      = pickIdx("EAN", "Talla -> Código de barras", "Talla -> C�digo de barras");
   const iNuevo    = pickIdx("Stock Nuevo");
@@ -519,6 +520,275 @@ function parseTiendasCSV(text){
   });
 }
 
+/* ====== ✅ Persistencia checks (localStorage) ====== */
+const LS_OK_PREFIX = "conc_ok_v2::";
+
+function currentDest(){
+  return String($("cAlmacenDestino")?.value || "").trim();
+}
+
+function stableRowId(r){
+  // incluye destino para que no se mezclen checks entre destinos
+  const dest = currentDest();
+  const ean = String(r?.EAN ?? "").trim(); // si no existe, ""
+  const uso = String(r?.Uso ?? "").trim();
+  const alm = String(r?.Almacen ?? "").trim();
+  const con = String(r?.Concepto ?? "").trim();
+  const des = String(r?.Descripcion ?? "").trim();
+  const tal = String(r?.Tallas ?? "").trim();
+  return [dest, ean, con, des, alm, uso, tal].join("||");
+}
+function okKey(r){ return LS_OK_PREFIX + stableRowId(r); }
+function isOk(r){
+  try { return localStorage.getItem(okKey(r)) === "1"; }
+  catch { return false; }
+}
+function setOk(r, val){
+  try{
+    const k = okKey(r);
+    if (val) localStorage.setItem(k, "1");
+    else localStorage.removeItem(k);
+  }catch{}
+}
+function clearAllOk(){
+  try{
+    const keys = [];
+    for (let i=0; i<localStorage.length; i++){
+      const k = localStorage.key(i);
+      if (k && k.startsWith(LS_OK_PREFIX)) keys.push(k);
+    }
+    keys.forEach(k => localStorage.removeItem(k));
+  }catch{}
+}
+
+/* ====== Botonera checks ====== */
+function ensureConcButtons(){
+  // Los ponemos al lado del meta, si existe
+  const meta = $("cMeta");
+  if (!meta) return;
+
+  // si ya existen, no duplicar
+  if ($("btnConcMarkAll") || $("btnConcClearAll")) return;
+
+  const wrap = document.createElement("div");
+  wrap.style.display = "flex";
+  wrap.style.gap = "8px";
+  wrap.style.flexWrap = "wrap";
+  wrap.style.marginTop = "8px";
+
+  const b1 = document.createElement("button");
+  b1.id = "btnConcMarkAll";
+  b1.type = "button";
+  b1.className = "btn secondary";
+  b1.textContent = "✅ Marcar todas (visibles)";
+  b1.addEventListener("click", ()=>{
+    const rows = state.concViewRows || [];
+    rows.forEach(r => setOk(r, true));
+    applyConciliacionViewFilters();
+  });
+
+  const b2 = document.createElement("button");
+  b2.id = "btnConcClearAll";
+  b2.type = "button";
+  b2.className = "btn secondary";
+  b2.textContent = "🧹 Limpiar checks (todos)";
+  b2.addEventListener("click", ()=>{
+    if (!confirm("¿Seguro que quieres borrar todos los checks guardados?")) return;
+    clearAllOk();
+    applyConciliacionViewFilters();
+  });
+
+  wrap.appendChild(b1);
+  wrap.appendChild(b2);
+
+  meta.parentElement?.appendChild(wrap);
+}
+
+/* ====== Render tabla conciliación (columnas como pediste + ✅) ====== */
+function renderTablaConciliacion(rows){
+  const wrap = $("conciliacionWrap");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  if(!rows || !rows.length){
+    wrap.textContent = "Sin diferencias.";
+    return;
+  }
+
+  const get = (r, ...keys)=>{
+    for (const k of keys){
+      if (r && r[k] !== undefined && r[k] !== null) return r[k];
+    }
+    return "";
+  };
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+
+  // Uso primero, Concepto junto a Tallas, ✅ al final
+  const headers = ["Uso","Descripcion","Almacen","Tallas","Concepto","CSV Velneo","CSV Tiendas","Total Stock Velneo","✅"];
+  headers.forEach(h=>{
+    const th=document.createElement("th");
+    th.textContent=h;
+    trh.appendChild(th);
+  });
+
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody=document.createElement("tbody");
+
+  rows.forEach((r, idx)=>{
+    const tr=document.createElement("tr");
+    if (idx % 2 === 1) tr.classList.add("alt");
+
+    const uso = get(r, "Uso");
+    const des = get(r, "Descripcion", "Descripción", "Descripci�n");
+    const alm = get(r, "Almacen", "Almacén");
+    const tal = get(r, "Tallas");
+    const con = get(r, "Concepto");
+
+    const vVel = get(r, "CSVVelneo", "CSV Velneo");
+    const vTie = get(r, "CSVTiendas", "CSV Tiendas");
+    const vTot = get(r, "Total", "Total Stock Velneo", "TotalStockVelneo");
+
+    const values = [uso, des, alm, tal, con, vVel, vTie, vTot];
+
+    values.forEach(v=>{
+      const td=document.createElement("td");
+      td.textContent = v ?? "";
+      tr.appendChild(td);
+    });
+
+    // ✅ checkbox persistente
+    const tdOk = document.createElement("td");
+    const chk = document.createElement("input");
+    chk.type = "checkbox";
+    chk.title = "Marcar como revisado";
+    chk.style.transform = "scale(1.15)";
+    chk.checked = isOk(r);
+
+    const applyRowOkStyle = ()=>{
+      tr.style.opacity = chk.checked ? "0.55" : "";
+    };
+    applyRowOkStyle();
+
+    chk.addEventListener("change", ()=>{
+      setOk(r, chk.checked);
+      applyRowOkStyle();
+    });
+
+    tdOk.appendChild(chk);
+    tr.appendChild(tdOk);
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+}
+
+/* ====== Filtros vista conciliación ====== */
+function applyConciliacionViewFilters(){
+  const q = ($("cQ")?.value || "").trim().toLowerCase();
+  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase();
+  const soloDif = !!$("cSoloDif")?.checked;
+  const usoSel = String($("cUso")?.value || "").trim();
+
+  let rows = state.concAll || [];
+
+  if (qConcepto){
+    rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
+  }
+
+  if (q){
+    rows = rows.filter(r=>{
+      const c = String(r.Concepto ?? "").toLowerCase();
+      const d = String(r.Descripcion ?? "").toLowerCase();
+      return c.includes(q) || d.includes(q);
+    });
+  }
+
+  if (soloDif){
+    // tu conciliacion.js debería marcar Dif en r.Almacen
+    rows = rows.filter(r => String(r.Almacen) === "Dif");
+  }
+
+  if (usoSel){
+    rows = rows.filter(r => String(r.Uso) === usoSel);
+  }
+
+  // guardamos filas visibles para botón "Marcar todas"
+  state.concViewRows = [...rows];
+
+  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
+  renderTablaConciliacion(rows);
+}
+
+/* ====== Mappings por uso (regla central) ====== */
+function buildMappingsForConciliacion(destAlmacen){
+  const selTiendas = selectedChecklist("cTiendaList").map(t => String(t).trim().toLowerCase());
+
+  const mapNuevo = {};
+  const mapUsado = {};
+
+  const ruleExcludeCentralFromNuevo = (String(destAlmacen).trim() === "34");
+
+  selTiendas.forEach(tienda=>{
+    const t = String(tienda).trim().toLowerCase();
+    mapUsado[t] = String(destAlmacen);
+
+    if (ruleExcludeCentralFromNuevo && t === "central") return;
+    mapNuevo[t] = String(destAlmacen);
+  });
+
+  return { nuevo: mapNuevo, usado: mapUsado };
+}
+
+function runConciliacion(){
+  if (typeof generarConciliacion !== "function"){
+    alert("Falta cargar modules/conciliacion.js antes que app.js");
+    return;
+  }
+  if (!state.velneo.length){
+    alert("Carga primero el CSV de Velneo.");
+    return;
+  }
+  if (!state.tiendas.length){
+    alert("Carga primero los CSV de Tiendas.");
+    return;
+  }
+
+  const dest = currentDest();
+  if (!dest){
+    alert("Selecciona Almacén destino (Velneo).");
+    return;
+  }
+
+  const totalTiendas = document.querySelectorAll("#cTiendaList input").length;
+  const tiendasSel = selectedChecklist("cTiendaList");
+  if (totalTiendas > 0 && tiendasSel.length === 0){
+    alert("Selecciona al menos una tienda para sumar.");
+    return;
+  }
+
+  // Velneo solo del almacén destino
+  const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
+
+  // Mapping por uso (nuevo/usado)
+  const mappingAlmacenes = buildMappingsForConciliacion(dest);
+
+  const res = generarConciliacion({
+    velneoRows: velneoFiltrado,
+    tiendasRows: state.tiendas,
+    mappingAlmacenes
+  });
+
+  state.concAll = res;
+  applyConciliacionViewFilters();
+}
+
 function fillConcAlmacenDestinoOptions(almacenesVelneo){
   const sel = $("cAlmacenDestino");
   if (!sel) return;
@@ -542,185 +812,6 @@ function fillConcTiendasChecklistFromData(){
   state.concTiendasList = tiendas;
   fillChecklist("cTiendaList", tiendas, true);
   applySearchToChecklist("cTiendaSearch", "cTiendaList");
-}
-
-function tallaKeyFromRow(r){
-  const talla = String(r?.Tallas ?? "").trim();
-  const low = talla.toLowerCase();
-  if (["unico","único","u","unica","única"].includes(low)) return 999999;
-  const m = talla.match(/\d+/);
-  return m ? Number(m[0]) : 999998;
-}
-
-/* ✅ NUEVO: render conciliación con orden de columnas y checkbox final */
-function renderTablaConciliacion(rows){
-  const wrap = $("conciliacionWrap");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-
-  if(!rows || !rows.length){
-    wrap.textContent = "Sin diferencias.";
-    return;
-  }
-
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  const trh = document.createElement("tr");
-
-  // Uso primero, Concepto al lado de Tallas, y checkbox al final
-  const headers = ["Uso","Descripcion","Almacen","Tallas","Concepto","CSV Velneo","CSV Tiendas","Total Stock Velneo","✅"];
-  headers.forEach(h=>{
-    const th=document.createElement("th");
-    th.textContent=h;
-    trh.appendChild(th);
-  });
-
-  thead.appendChild(trh);
-  table.appendChild(thead);
-
-  const tbody=document.createElement("tbody");
-
-  rows.forEach((r, idx)=>{
-    const tr=document.createElement("tr");
-    if (idx % 2 === 1) tr.classList.add("alt"); // alterna color por fila
-
-    const get = (k1, k2)=> (r[k1] ?? r[k2] ?? "");
-
-    const values = [
-      get("Uso","uso"),
-      get("Descripcion","Descripción"),
-      get("Almacen","Almacén"),
-      get("Tallas","Talla"),
-      get("Concepto","concepto"),
-      get("CSVVelneo","CSV Velneo"),
-      get("CSVTiendas","CSV Tiendas"),
-      get("Total","Total Stock Velneo"),
-    ];
-
-    values.forEach(v=>{
-      const td=document.createElement("td");
-      td.textContent = v ?? "";
-      tr.appendChild(td);
-    });
-
-    const tdOk = document.createElement("td");
-    const chk = document.createElement("input");
-    chk.type = "checkbox";
-    chk.title = "Marcar como revisado";
-    chk.style.transform = "scale(1.2)";
-    tdOk.appendChild(chk);
-    tr.appendChild(tdOk);
-
-    tbody.appendChild(tr);
-  });
-
-  table.appendChild(tbody);
-  wrap.appendChild(table);
-}
-
-function applyConciliacionViewFilters(){
-  const q = ($("cQ")?.value || "").trim().toLowerCase();
-  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase();
-  const soloDif = !!$("cSoloDif")?.checked;
-  const usoSel = String($("cUso")?.value || "").trim();
-
-  let rows = state.concAll || [];
-
-  if (qConcepto){
-    rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
-  }
-
-  if (q){
-    rows = rows.filter(r=>{
-      const c = String(r.Concepto ?? "").toLowerCase();
-      const d = String(r.Descripcion ?? "").toLowerCase();
-      return c.includes(q) || d.includes(q);
-    });
-  }
-
-  if (soloDif){
-    // aquí depende de cómo lo montaste: si usas Almacen "Dif" o ya solo diferencias.
-    rows = rows.filter(r => String(r.Almacen ?? "").toLowerCase() === "dif");
-  }
-
-  if (usoSel){
-    rows = rows.filter(r => String(r.Uso) === usoSel);
-  }
-
-  // Orden: por Descripcion/uso y talla ASC
-  rows = [...rows].sort((a,b)=>{
-    const ak = `${a.Descripcion||""} ${a.Uso||""}`;
-    const bk = `${b.Descripcion||""} ${b.Uso||""}`;
-    if (ak !== bk) return ak.localeCompare(bk, "es");
-
-    const ta = tallaKeyFromRow(a);
-    const tb = tallaKeyFromRow(b);
-    if (ta !== tb) return ta - tb;
-
-    return String(a.Concepto||"").localeCompare(String(b.Concepto||""), "es");
-  });
-
-  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
-  renderTablaConciliacion(rows);
-}
-
-// mapping por uso. Regla: si destino=34, "central" SOLO en USADO.
-function buildMappingsForConciliacion(destAlmacen){
-  const selTiendas = selectedChecklist("cTiendaList").map(t => String(t).trim().toLowerCase());
-
-  const mapNuevo = {};
-  const mapUsado = {};
-
-  const ruleExcludeCentralFromNuevo = (String(destAlmacen).trim() === "34");
-
-  selTiendas.forEach(tienda=>{
-    const t = String(tienda).trim().toLowerCase();
-    mapUsado[t] = String(destAlmacen);
-    if (ruleExcludeCentralFromNuevo && t === "central") return;
-    mapNuevo[t] = String(destAlmacen);
-  });
-
-  return { nuevo: mapNuevo, usado: mapUsado };
-}
-
-function runConciliacion(){
-  if (typeof generarConciliacion !== "function"){
-    alert("Falta cargar modules/conciliacion.js antes que app.js");
-    return;
-  }
-  if (!state.velneo.length){
-    alert("Carga primero el CSV de Velneo.");
-    return;
-  }
-  if (!state.tiendas.length){
-    alert("Carga primero los CSV de Tiendas.");
-    return;
-  }
-
-  const dest = String($("cAlmacenDestino")?.value || "").trim();
-  if (!dest){
-    alert("Selecciona Almacén destino (Velneo).");
-    return;
-  }
-
-  const totalTiendas = document.querySelectorAll("#cTiendaList input").length;
-  const tiendasSel = selectedChecklist("cTiendaList");
-  if (totalTiendas > 0 && tiendasSel.length === 0){
-    alert("Selecciona al menos una tienda para sumar.");
-    return;
-  }
-
-  const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
-  const mappingAlmacenes = buildMappingsForConciliacion(dest);
-
-  const res = generarConciliacion({
-    velneoRows: velneoFiltrado,
-    tiendasRows: state.tiendas,
-    mappingAlmacenes
-  });
-
-  state.concAll = res;
-  applyConciliacionViewFilters();
 }
 
 function applyPreset(destAlmacen, tiendasList){
@@ -806,6 +897,9 @@ function setupUI(){
 
       fillConcAlmacenDestinoOptions(almacenesVelneo);
       setText("cMeta", `Velneo cargado: ${state.velneo.length} filas | Almacenes: ${almacenesVelneo.join(", ")}`);
+
+      // crea botones de checks si no existen
+      ensureConcButtons();
     }catch(err){
       state.velneo = [];
       alert(err?.message ?? String(err));
@@ -821,6 +915,8 @@ function setupUI(){
     }
     fillConcTiendasChecklistFromData();
     setText("cMeta", `Tiendas cargadas: ${state.tiendas.length} filas | Tiendas: ${state.concTiendasList.join(", ")}`);
+
+    ensureConcButtons();
   });
 
   // Conciliación: filtros vista
@@ -828,6 +924,7 @@ function setupUI(){
   $("cSoloDif")?.addEventListener("change", applyConciliacionViewFilters);
   $("cUso")?.addEventListener("change", applyConciliacionViewFilters);
   $("cConcepto")?.addEventListener("input", applyConciliacionViewFilters);
+  $("cAlmacenDestino")?.addEventListener("change", applyConciliacionViewFilters);
 
   // Tiendas checklist
   $("cTiendaSearch")?.addEventListener("input", ()=> applySearchToChecklist("cTiendaSearch","cTiendaList"));
@@ -840,6 +937,9 @@ function setupUI(){
 
   // Conciliar
   $("btnConciliar")?.addEventListener("click", runConciliacion);
+
+  // crea botones aunque todavía no hayas cargado CSV (por si acaso)
+  ensureConcButtons();
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
