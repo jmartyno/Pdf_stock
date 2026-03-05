@@ -1,7 +1,12 @@
 // app.js
 // Stock por tallas: CSV local -> pivot con tallas en columnas + filtros + print
 const $ = (id) => document.getElementById(id);
-
+window.addEventListener("error", (e) => {
+  alert("❌ JS ERROR: " + (e.message || "error") + (e.filename ? "\n" + e.filename : "") + (e.lineno ? ":" + e.lineno : ""));
+});
+window.addEventListener("unhandledrejection", (e) => {
+  alert("❌ PROMESA: " + (e.reason?.message || String(e.reason || "error")));
+});
 const state = {
   rows: [],
   grupos: [],
@@ -752,8 +757,16 @@ function buildMappingsForConciliacion(destAlmacen){
 }
 
 function runConciliacion(){
+  // DEBUG: ver que el click llega
+  console.log("▶ runConciliacion()", {
+    hasFn: typeof generarConciliacion,
+    velneo: state.velneo.length,
+    tiendas: state.tiendas.length,
+    dest: String($("cAlmacenDestino")?.value || "").trim()
+  });
+
   if (typeof generarConciliacion !== "function"){
-    alert("Falta cargar modules/conciliacion.js antes que app.js");
+    alert("Falta cargar modules/conciliacion.js (generarConciliacion no existe). Revisa ruta/404/caché.");
     return;
   }
   if (!state.velneo.length){
@@ -779,24 +792,34 @@ function runConciliacion(){
   }
 
   const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
+  console.log("velneoFiltrado", velneoFiltrado.length);
 
   state.concVelneoStock = buildVelneoStockMap(velneoFiltrado, dest);
 
   const mappingAlmacenes = buildMappingsForConciliacion(dest);
+  console.log("mappingAlmacenes", mappingAlmacenes);
 
-  const res = generarConciliacion({
-    velneoRows: velneoFiltrado,
-    tiendasRows: state.tiendas,
-    mappingAlmacenes
-  });
+  try{
+    const res = generarConciliacion({
+      velneoRows: velneoFiltrado,
+      tiendasRows: state.tiendas,
+      mappingAlmacenes
+    });
 
-  state.concAll = res;
-  applyConciliacionViewFilters();
+    console.log("✅ conciliacion OK", res.length, res[0]);
 
-  if (res.length && !res[0].EAN){
-    alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh y revisa el archivo modules/conciliacion.js.");
+    state.concAll = res || [];
+    applyConciliacionViewFilters();
+
+    if (state.concAll.length && !state.concAll[0].EAN){
+      alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas). Haz hard refresh.");
+    }
+  }catch(err){
+    console.error(err);
+    alert("❌ Error dentro de generarConciliacion(): " + (err?.message || String(err)));
   }
 }
+
 
 function applyPreset(destAlmacen, tiendasList){
   const sel = $("cAlmacenDestino");
@@ -918,3 +941,4 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
