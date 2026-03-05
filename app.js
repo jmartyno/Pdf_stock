@@ -1,15 +1,5 @@
 // app.js
 // Stock por tallas: CSV local -> pivot con tallas en columnas + filtros + print
-
-window.addEventListener("error", (e) => {
-  console.error(e);
-  alert("❌ JS: " + (e.message || "error"));
-});
-window.addEventListener("unhandledrejection", (e) => {
-  console.error(e);
-  alert("❌ PROMESA: " + (e.reason?.message || String(e.reason || "error")));
-});
-
 const $ = (id) => document.getElementById(id);
 
 const state = {
@@ -20,9 +10,7 @@ const state = {
   velneo: [],
   tiendas: [],
   concAll: [],
-  concTiendasList: [],
-
-  concVelneoStock: new Map() // para "Queda (Velneo)"
+  concTiendasList: []
 };
 
 function setText(id, txt){
@@ -255,8 +243,8 @@ function makeTablePivot(pivot, opts){
   table.appendChild(thead);
 
   const tbody = document.createElement("tbody");
-
   let alt = false;
+
   for (const it of items){
     const totalN = rowTotal(it.byTallaNuevo);
     const totalU = rowTotal(it.byTallaUsado);
@@ -367,26 +355,6 @@ function makeSummary(rows, opts){
     alt=!alt;
   }
 
-  const trSep=document.createElement("tr");
-  for(let i=0;i<5;i++) trSep.appendChild(document.createElement("td"));
-  tbody.appendChild(trSep);
-
-  const trTN=document.createElement("tr");
-  trTN.appendChild(tdLeft("TOTAL"));
-  trTN.appendChild(tdLeft(""));
-  trTN.appendChild(tdCenter(""));
-  trTN.appendChild(tdTipo("Nuevo"));
-  trTN.appendChild(tdTotal(fmtCell(grandN, hideZeros)));
-  tbody.appendChild(trTN);
-
-  const trTU=document.createElement("tr");
-  trTU.appendChild(tdLeft(""));
-  trTU.appendChild(tdLeft(""));
-  trTU.appendChild(tdCenter(""));
-  trTU.appendChild(tdTipo("Usado"));
-  trTU.appendChild(tdTotal(fmtCell(grandU, hideZeros)));
-  tbody.appendChild(trTU);
-
   table.appendChild(tbody);
   return table;
 }
@@ -436,14 +404,10 @@ function applyFilters(){
   $("meta").textContent = `Filas: ${filtered.length} | Artículos: ${pivot.items.length} | Tallas: ${pivot.tallas.length}`;
 }
 
-/* ===================== Conciliación ===================== */
+/* ===================== CONCILIACIÓN ===================== */
 
 function parseVelneoCSV(text){
-  const lines = text
-    .replace(/\r\n/g,"\n").replace(/\r/g,"\n")
-    .split("\n")
-    .filter(l => l.trim().length > 0);
-
+  const lines = text.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n").filter(l => l.trim().length > 0);
   if (!lines.length) return [];
 
   const parseLine = (line) => {
@@ -478,7 +442,7 @@ function parseVelneoCSV(text){
   };
 
   const iConcepto = pickIdx("Concepto");
-  const iDesc     = pickIdx("Descripcion", "Descripción", "Concepto -> Descripción", "Concepto -> Descripci�n", "Descripci�n");
+  const iDesc     = pickIdx("Descripcion", "Descripción", "Descripci�n");
   const iTalla    = pickIdx("Talla");
   const iEAN      = pickIdx("EAN", "Talla -> Código de barras", "Talla -> C�digo de barras");
   const iNuevo    = pickIdx("Stock Nuevo");
@@ -493,26 +457,19 @@ function parseVelneoCSV(text){
   const out = [];
   for (let li=1; li<lines.length; li++){
     const cols = parseLine(lines[li]);
-
-    const concepto = String(cols[iConcepto] ?? "").trim();
-    const descripcion = String(cols[iDesc] ?? "").trim();
-    const talla = String(cols[iTalla] ?? "").trim();
     const ean = String(cols[iEAN] ?? "").trim();
-    const almacen = String(cols[iAlm] ?? "").trim();
-
     if (!ean) continue;
 
     out.push({
       EAN: ean,
-      Concepto: concepto,
-      Descripcion: descripcion,
-      Talla: talla,
+      Concepto: String(cols[iConcepto] ?? "").trim(),
+      Descripcion: String(cols[iDesc] ?? "").trim(),
+      Talla: String(cols[iTalla] ?? "").trim(),
       StockNuevo: toNumber(cols[iNuevo]),
       StockUsado: toNumber(cols[iAlq]),
-      Almacen: almacen
+      Almacen: String(cols[iAlm] ?? "").trim()
     });
   }
-
   return out;
 }
 
@@ -531,128 +488,9 @@ function parseTiendasCSV(text){
   });
 }
 
-/* --- helpers para "Queda (Velneo)" --- */
-function parseTallasText(s){
-  return String(s||"")
-    .split(/\s+/)
-    .map(x => x.trim())
-    .filter(Boolean)
-    .map(pair=>{
-      const i = pair.lastIndexOf(":");
-      if (i < 0) return null;
-      const t = pair.slice(0,i).trim();
-      const v = Number(pair.slice(i+1).trim());
-      if (!t || !Number.isFinite(v)) return null;
-      return [t, v];
-    })
-    .filter(Boolean);
-}
-
-function buildVelneoStockMap(velneoFiltrado, destAlmacen){
-  const m = new Map();
-  for (const r of velneoFiltrado){
-    const ean = String(r.EAN || "").trim();
-    const talla = String(r.Talla || "").trim();
-    const alm = String(destAlmacen || "").trim();
-    if (!ean || !talla || !alm) continue;
-
-    const kN = `${ean}||${talla}||${alm}||Nuevo`;
-    const kU = `${ean}||${talla}||${alm}||Usado`;
-
-    m.set(kN, (m.get(kN) || 0) + (Number(r.StockNuevo)||0));
-    m.set(kU, (m.get(kU) || 0) + (Number(r.StockUsado)||0));
-  }
-  return m;
-}
-
-function calcQueda(row, destAlmacen){
-  if (row.Almacen !== "Dif") return "";
-
-  const ean = String(row.EAN || "").trim();
-  const uso = String(row.Uso || "").trim(); // "Nuevo"|"Usado"
-  if (!ean || !uso || !destAlmacen) return "";
-
-  const pairs = parseTallasText(row.Tallas);
-  if (!pairs.length) return "";
-
-  if (pairs.length === 1){
-    const [talla, dif] = pairs[0];
-    const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
-    const vel = Number(state.concVelneoStock.get(k) || 0);
-    const queda = vel - dif;
-    return String(queda);
-  }
-
-  const parts = [];
-  for (const [talla, dif] of pairs){
-    const k = `${ean}||${talla}||${destAlmacen}||${uso}`;
-    const vel = Number(state.concVelneoStock.get(k) || 0);
-    const queda = vel - dif;
-    parts.push(`${talla}→${queda}`);
-  }
-  return parts.join(" ");
-}
-
-/* --- ORDEN ASC por talla (para filas) --- */
-function tallaKeyFromRow(r){
-  const tallas = String(r?.Tallas || "").trim(); // ej: "70:1"
-  const talla = tallas.split(/\s+/)[0]?.split(":")[0]?.trim() || "";
-  const low = talla.toLowerCase();
-
-  if (["unico","único","u","unica","única"].includes(low)) return 999999;
-
-  const m = talla.match(/\d+/);
-  return m ? Number(m[0]) : 999998;
-}
-
-function renderTablaConciliacion(rows, destAlmacen){
-  const wrap = $("conciliacionWrap");
-  if (!wrap) return;
-  wrap.innerHTML = "";
-
-  if(!rows || !rows.length){
-    wrap.textContent = "Sin diferencias.";
-    return;
-  }
-
-  const table = document.createElement("table");
-  const thead = document.createElement("thead");
-  const trh = document.createElement("tr");
-
-  ["Concepto","Descripcion","Almacen","Uso","Tallas","Total","Queda (Velneo)"].forEach(h=>{
-    const th=document.createElement("th");
-    th.textContent=h;
-    trh.appendChild(th);
-  });
-
-  thead.appendChild(trh);
-  table.appendChild(thead);
-
-  const tbody=document.createElement("tbody");
-  rows.forEach(r=>{
-    const tr=document.createElement("tr");
-
-    ["Concepto","Descripcion","Almacen","Uso","Tallas","Total"].forEach(k=>{
-      const td=document.createElement("td");
-      td.textContent = r[k] ?? "";
-      tr.appendChild(td);
-    });
-
-    const tdQ = document.createElement("td");
-    tdQ.textContent = calcQueda(r, destAlmacen);
-    tr.appendChild(tdQ);
-
-    tbody.appendChild(tr);
-  });
-
-  table.appendChild(tbody);
-  wrap.appendChild(table);
-}
-
 function fillConcAlmacenDestinoOptions(almacenesVelneo){
   const sel = $("cAlmacenDestino");
   if (!sel) return;
-
   sel.innerHTML = "";
   almacenesVelneo.forEach(a=>{
     const o=document.createElement("option");
@@ -660,10 +498,7 @@ function fillConcAlmacenDestinoOptions(almacenesVelneo){
     o.textContent = String(a);
     sel.appendChild(o);
   });
-
-  if (sel.options.length && !sel.value) {
-    sel.value = sel.options[0].value;
-  }
+  if (sel.options.length && !sel.value) sel.value = sel.options[0].value;
 }
 
 function fillConcTiendasChecklistFromData(){
@@ -672,74 +507,6 @@ function fillConcTiendasChecklistFromData(){
   state.concTiendasList = tiendas;
   fillChecklist("cTiendaList", tiendas, true);
   applySearchToChecklist("cTiendaSearch", "cTiendaList");
-}
-
-function applyConciliacionViewFilters(){
-  const q = ($("cQ")?.value || "").trim().toLowerCase();
-  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase();
-  const soloDif = !!$("cSoloDif")?.checked;
-  const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
-  const dest = String($("cAlmacenDestino")?.value || "").trim();
-
-  let rows = state.concAll || [];
-
-  if (qConcepto){
-    rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
-  }
-
-  if (q){
-    rows = rows.filter(r=>{
-      const c = String(r.Concepto ?? "").toLowerCase();
-      const d = String(r.Descripcion ?? "").toLowerCase();
-      return c.includes(q) || d.includes(q);
-    });
-  }
-
-  if (soloDif){
-    rows = rows.filter(r => r.Almacen === "Dif");
-  }
-
-  if (usoSel){
-    rows = rows.filter(r => String(r.Uso) === usoSel);
-  }
-
-  // Total de "Queda (Velneo)" en lo visible (solo filas DIF)
-  let totalQueda = 0;
-  for (const r of rows){
-    if (r.Almacen !== "Dif") continue;
-    const s = String(calcQueda(r, dest) || "").trim();
-    if (!s) continue;
-
-    if (/^-?\d+$/.test(s)){
-      totalQueda += Number(s);
-    } else {
-      const matches = s.match(/→\s*(-?\d+)/g) || [];
-      for (const m of matches){
-        const n = Number(m.replace("→","").trim());
-        if (Number.isFinite(n)) totalQueda += n;
-      }
-    }
-  }
-
-  // ORDEN: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, luego talla ASC
-  rows = [...rows].sort((a,b)=>{
-    const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
-    const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
-    if (ak !== bk) return ak.localeCompare(bk, "es");
-
-    const prio = (x)=> x.Almacen==="Dif" ? 0 : (x.Almacen==="CSV" ? 1 : 2);
-    const pa = prio(a), pb = prio(b);
-    if (pa !== pb) return pa - pb;
-
-    const ta = tallaKeyFromRow(a);
-    const tb = tallaKeyFromRow(b);
-    if (ta !== tb) return ta - tb; // ASC
-
-    return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
-  });
-
-  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length}) | Total queda: ${totalQueda}`);
-  renderTablaConciliacion(rows, dest);
 }
 
 // mapping por uso. Regla: si destino=34, "central" SOLO en USADO.
@@ -760,67 +527,188 @@ function buildMappingsForConciliacion(destAlmacen){
   return { nuevo: mapNuevo, usado: mapUsado };
 }
 
-function runConciliacion(){
-  try{
-    if (typeof generarConciliacion !== "function"){
-      alert("Falta cargar modules/conciliacion.js antes que app.js");
-      return;
-    }
-    if (!state.velneo.length){
-      alert("Carga primero el CSV de Velneo.");
-      return;
-    }
-    if (!state.tiendas.length){
-      alert("Carga primero los CSV de Tiendas.");
-      return;
-    }
-
-    const dest = String($("cAlmacenDestino")?.value || "").trim();
-    if (!dest){
-      alert("Selecciona Almacén destino (Velneo).");
-      return;
-    }
-
-    const totalTiendas = document.querySelectorAll("#cTiendaList input").length;
-    const tiendasSel = selectedChecklist("cTiendaList");
-    if (totalTiendas > 0 && tiendasSel.length === 0){
-      alert("Selecciona al menos una tienda para sumar.");
-      return;
-    }
-
-    const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
-    state.concVelneoStock = buildVelneoStockMap(velneoFiltrado, dest);
-
-    const mappingAlmacenes = buildMappingsForConciliacion(dest);
-
-    const res = generarConciliacion({
-      velneoRows: velneoFiltrado,
-      tiendasRows: state.tiendas,
-      mappingAlmacenes
-    });
-
-    state.concAll = res;
-    applyConciliacionViewFilters();
-
-    if (res.length && !res[0].EAN){
-      alert("Tu conciliacion.js no está actualizado (faltan EAN en las filas).");
-    }
-  }catch(err){
-    console.error(err);
-    alert("❌ Conciliar: " + (err?.message || String(err)));
-  }
+/* --- helpers render con ancho en "ch" --- */
+function tdFixed(txt, widthCh){
+  const td = document.createElement("td");
+  td.textContent = (txt ?? "") === null ? "" : String(txt ?? "");
+  td.style.width = `${widthCh}ch`;
+  td.style.maxWidth = `${widthCh}ch`;
+  td.style.whiteSpace = "nowrap";
+  td.style.overflow = "hidden";
+  td.style.textOverflow = "ellipsis";
+  return td;
 }
 
-function applyPreset(destAlmacen, tiendasList){
-  const sel = $("cAlmacenDestino");
-  if (sel) sel.value = String(destAlmacen);
+function tdNumFixed(n, widthCh){
+  const td = tdFixed((Number.isFinite(Number(n)) ? String(Number(n)) : (n ?? "")), widthCh);
+  td.style.textAlign = "right";
+  return td;
+}
 
-  const wanted = new Set(tiendasList.map(v=>String(v).trim().toLowerCase()));
-  document.querySelectorAll("#cTiendaList input[type=checkbox]").forEach(cb=>{
-    cb.checked = wanted.has(String(cb.value).trim().toLowerCase());
+function tdDiffFixed(n, widthCh){
+  const num = Number(n);
+  const td = tdNumFixed(num, widthCh);
+
+  // Verde claro si positivo, rojo claro si negativo
+  if (Number.isFinite(num)){
+    if (num > 0) td.style.background = "#d9f7e5"; // verde claro
+    if (num < 0) td.style.background = "#ffd9d9"; // rojo claro
+  }
+  return td;
+}
+
+function tallaSortKey(t){
+  const s = String(t||"").trim().toLowerCase();
+  if (["unico","único","u","unica","única"].includes(s)) return 999999;
+  const m = String(t).match(/\d+/);
+  return m ? Number(m[0]) : 999998;
+}
+
+function renderTablaConciliacion(rows){
+  const wrap = $("conciliacionWrap");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+
+  if(!rows || !rows.length){
+    wrap.textContent = "Sin datos.";
+    return;
+  }
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+
+  const headers = [
+    ["Concepto",8],
+    ["Descripcion",25],
+    ["Almacen",8],
+    ["Uso",8],
+    ["Tallas",8],
+    ["CSV Velneo",6],
+    ["CSV Tiendas",6],
+    ["Total Stock Velneo",12]
+  ];
+
+  headers.forEach(([h,w])=>{
+    const th = document.createElement("th");
+    th.textContent = h;
+    th.style.width = `${w}ch`;
+    th.style.maxWidth = `${w}ch`;
+    trh.appendChild(th);
   });
 
-  applySearchToChecklist("cTiendaSearch", "cTiendaList");
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+
+  rows.forEach(r=>{
+    const tr = document.createElement("tr");
+
+    tr.appendChild(tdFixed(r.Concepto, 8));
+    tr.appendChild(tdFixed(r.Descripcion, 25));
+    tr.appendChild(tdFixed(r.Almacen, 8));
+    tr.appendChild(tdFixed(r.Uso, 8));
+    tr.appendChild(tdFixed(r.Talla, 8));          // solo talla (sin unidades)
+    tr.appendChild(tdNumFixed(r.CSVVelneo, 6));
+    tr.appendChild(tdNumFixed(r.CSVTiendas, 6));
+    tr.appendChild(tdDiffFixed(r.TotalStockVelneo, 12));
+
+    tbody.appendChild(tr);
+  });
+
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+}
+
+function applyConciliacionViewFilters(){
+  const q = ($("cQ")?.value || "").trim().toLowerCase();
+  const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase();
+  const soloDif = !!$("cSoloDif")?.checked;
+  const usoSel = String($("cUso")?.value || "").trim(); // "", "Nuevo", "Usado"
+
+  let rows = state.concAll || [];
+
+  // filtro SOLO concepto
+  if (qConcepto){
+    rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
+  }
+
+  // buscar concepto/descripcion
+  if (q){
+    rows = rows.filter(r=>{
+      const c = String(r.Concepto ?? "").toLowerCase();
+      const d = String(r.Descripcion ?? "").toLowerCase();
+      return c.includes(q) || d.includes(q);
+    });
+  }
+
+  if (usoSel){
+    rows = rows.filter(r => String(r.Uso) === usoSel);
+  }
+
+  // solo diferencias => TotalStockVelneo != 0
+  if (soloDif){
+    rows = rows.filter(r => Number(r.TotalStockVelneo || 0) !== 0);
+  }
+
+  // orden: Concepto/Descripcion/Uso y talla ASC
+  rows = [...rows].sort((a,b)=>{
+    const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
+    const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
+    if (ak !== bk) return ak.localeCompare(bk, "es");
+
+    const ta = tallaSortKey(a.Talla);
+    const tb = tallaSortKey(b.Talla);
+    if (ta !== tb) return ta - tb;
+
+    return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
+  });
+
+  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
+  renderTablaConciliacion(rows);
+}
+
+function runConciliacion(){
+  if (typeof generarConciliacion !== "function"){
+    alert("Falta cargar modules/conciliacion.js antes que app.js");
+    return;
+  }
+  if (!state.velneo.length){
+    alert("Carga primero el CSV de Velneo.");
+    return;
+  }
+  if (!state.tiendas.length){
+    alert("Carga primero los CSV de Tiendas.");
+    return;
+  }
+
+  const dest = String($("cAlmacenDestino")?.value || "").trim();
+  if (!dest){
+    alert("Selecciona Almacén destino (Velneo).");
+    return;
+  }
+
+  const totalTiendas = document.querySelectorAll("#cTiendaList input").length;
+  const tiendasSel = selectedChecklist("cTiendaList");
+  if (totalTiendas > 0 && tiendasSel.length === 0){
+    alert("Selecciona al menos una tienda para sumar.");
+    return;
+  }
+
+  // Velneo solo del almacén destino
+  const velneoFiltrado = state.velneo.filter(r => String(r.Almacen).trim() === dest);
+
+  const mappingAlmacenes = buildMappingsForConciliacion(dest);
+
+  const res = generarConciliacion({
+    velneoRows: velneoFiltrado,
+    tiendasRows: state.tiendas,
+    mappingAlmacenes
+  });
+
+  state.concAll = res;
+  applyConciliacionViewFilters();
 }
 
 function setupUI(){
@@ -850,7 +738,6 @@ function setupUI(){
     }
   });
 
-  // Pivot listeners
   $("fGrupoSearch")?.addEventListener("input", ()=>{ applySearchToChecklist("fGrupoSearch","fGrupoList"); applyFilters(); });
   $("fAlmacenSearch")?.addEventListener("input", ()=>{ applySearchToChecklist("fAlmacenSearch","fAlmacenList"); applyFilters(); });
   $("fGrupoList")?.addEventListener("change", applyFilters);
@@ -911,7 +798,7 @@ function setupUI(){
     setText("cMeta", `Tiendas cargadas: ${state.tiendas.length} filas | Tiendas: ${state.concTiendasList.join(", ")}`);
   });
 
-  // Conciliación: filtros vista
+  // filtros conciliación
   $("cQ")?.addEventListener("input", applyConciliacionViewFilters);
   $("cConcepto")?.addEventListener("input", applyConciliacionViewFilters);
   $("cSoloDif")?.addEventListener("change", applyConciliacionViewFilters);
@@ -922,11 +809,16 @@ function setupUI(){
   $("cTiendaAll")?.addEventListener("click", ()=> setAll("cTiendaList", true));
   $("cTiendaNone")?.addEventListener("click", ()=> setAll("cTiendaList", false));
 
-  // Presets
-  $("btnPreset34")?.addEventListener("click", ()=> applyPreset("34", ["ayala","hermosilla","cea","central"]));
-  $("btnPreset1")?.addEventListener("click", ()=> applyPreset("1", ["1"]));
+  // Presets (si en tu CSV viene “central”, marca “central”)
+  $("btnPreset34")?.addEventListener("click", ()=> {
+    const sel = $("cAlmacenDestino"); if (sel) sel.value = "34";
+    applyConciliacionViewFilters();
+  });
+  $("btnPreset1")?.addEventListener("click", ()=> {
+    const sel = $("cAlmacenDestino"); if (sel) sel.value = "1";
+    applyConciliacionViewFilters();
+  });
 
-  // Conciliar
   $("btnConciliar")?.addEventListener("click", runConciliacion);
 }
 
