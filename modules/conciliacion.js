@@ -1,6 +1,6 @@
 // modules/conciliacion.js
-// Conciliación Velneo vs CSV Tiendas
-// Salida: filas para tabla (EAN, Concepto, Descripcion, Almacen, Uso, Tallas, Total)
+// Conciliación Velneo vs CSV Tiendas (1 fila por talla)
+// Salida: {EAN, Concepto, Descripcion, Almacen, Uso, Talla, CSVVelneo, CSVTiendas, TotalStockVelneo}
 
 (function(){
 
@@ -15,62 +15,14 @@
     map.get(k)[field] += (Number(val) || 0);
   }
 
-  // Convierte Map talla->valor a string "44:2 46:-1 UNICO:1" (ASC)
-  function tallasToText(mapTalla){
-    const entries = [...mapTalla.entries()]
-      .map(([t,v]) => [String(t).trim(), Number(v)||0])
-      .filter(([,v]) => v !== 0);
-
-    const isUnico = (s)=>{
-      const v = String(s).trim().toLowerCase();
-      return v === "unico" || v === "único" || v === "u" || v === "unica" || v === "única";
-    };
-
-    const numVal = (s)=>{
-      const m = String(s).match(/\d+/);
-      return m ? Number(m[0]) : NaN;
-    };
-
-    entries.sort(([ta],[tb])=>{
-      const au=isUnico(ta), bu=isUnico(tb);
-      if (au && !bu) return 1;
-      if (!au && bu) return -1;
-
-      const na = numVal(ta), nb = numVal(tb);
-      const aNum = Number.isFinite(na), bNum = Number.isFinite(nb);
-
-      if (aNum && bNum) return na - nb;     // ✅ ASC
-      if (aNum && !bNum) return -1;
-      if (!aNum && bNum) return 1;
-
-      return ta.localeCompare(tb, "es");
-    });
-
-    return entries.map(([t,v]) => `${t}:${v}`).join(" ");
-  }
-
-  // Saca una “clave” numérica de la PRIMERA talla de la fila (para ordenar filas tipo 70:1)
-  function tallaKeyFromRow(row){
-    const tallas = String(row?.Tallas || "").trim(); // "70:1"
-    const first = tallas.split(/\s+/)[0] || "";
-    const talla = first.split(":")[0]?.trim() || "";
-    const low = talla.toLowerCase();
-
-    if (["unico","único","u","unica","única"].includes(low)) return 999999;
-
-    const m = talla.match(/\d+/);
-    return m ? Number(m[0]) : 999998;
-  }
-
   window.generarConciliacion = function({
     velneoRows,
     tiendasRows,
-    mappingAlmacenes  // { nuevo:{tienda->alm}, usado:{tienda->alm} }  o {tienda->alm}
+    mappingAlmacenes // { nuevo:{tienda->alm}, usado:{tienda->alm} }
   }){
 
-    // Normaliza mapping: permitir que venga plano {tienda:alm}
-    const mapNuevo = (mappingAlmacenes && mappingAlmacenes.nuevo) ? mappingAlmacenes.nuevo : mappingAlmacenes || {};
-    const mapUsado = (mappingAlmacenes && mappingAlmacenes.usado) ? mappingAlmacenes.usado : mappingAlmacenes || {};
+    const mapNuevo = (mappingAlmacenes && mappingAlmacenes.nuevo) ? mappingAlmacenes.nuevo : {};
+    const mapUsado = (mappingAlmacenes && mappingAlmacenes.usado) ? mappingAlmacenes.usado : {};
 
     // 1) Velneo -> Map por (EAN,talla,almacen) con nuevo/usado
     const velneo = new Map();
@@ -100,7 +52,7 @@
 
     tiendasRows.forEach(r=>{
       const tienda = norm(r.tienda).toLowerCase();
-      const uso = norm(r.uso).toUpperCase();   // "NUEVO" / "USADO"
+      const uso = norm(r.uso).toUpperCase(); // NUEVO / USADO
       const isNuevo = (uso === "NUEVO");
 
       const almacenDestino = isNuevo ? mapNuevo[tienda] : mapUsado[tienda];
@@ -112,118 +64,57 @@
       const talla = norm(r.talla);
       const k = key(ean, talla, almacenDestino);
 
-      const field = isNuevo ? "nuevo" : "usado";
-      add(tiendas, k, field, r.unidades);
+      add(tiendas, k, isNuevo ? "nuevo" : "usado", r.unidades);
     });
 
-    // 3) Agrupar por (EAN, almacen, uso) con tallas
-    const group = new Map(); // GK -> {ean, concepto, descripcion, almacen, uso, V,T,D maps}
-
-    function gkey(ean, almacen, uso){
-      return `${ean}||${almacen}||${uso}`;
-    }
-
+    // 3) Unir claves y sacar filas "planas" por talla
     const allKeys = new Set([...velneo.keys(), ...tiendas.keys()]);
+    const out = [];
 
     allKeys.forEach(k=>{
       const [ean, talla, almacen] = k.split("||");
-      const m = metaByEAN.get(ean);
-      if(!m) return;
+      const meta = metaByEAN.get(ean);
+      if(!meta) return;
 
-      const v = velneo.get(k) || {nuevo:0, usado:0};
-      const t = tiendas.get(k) || {nuevo:0, usado:0};
+      const v = velneo.get(k) || { nuevo:0, usado:0 };
+      const t = tiendas.get(k) || { nuevo:0, usado:0 };
 
-      ["nuevo","usado"].forEach(uso=>{
-        const V = Number(v[uso] || 0);
-        const T = Number(t[uso] || 0);
-        const D = V - T;
+      // Nuevo
+      if ((v.nuevo || 0) !== 0 || (t.nuevo || 0) !== 0){
+        const csvVelneo = Number(v.nuevo||0);
+        const csvTiendas = Number(t.nuevo||0);
+        out.push({
+          EAN: ean,
+          Concepto: meta.concepto,
+          Descripcion: meta.descripcion,
+          Almacen: almacen,
+          Uso: "Nuevo",
+          Talla: talla,
+          CSVVelneo: csvVelneo,
+          CSVTiendas: csvTiendas,
+          TotalStockVelneo: csvTiendas - csvVelneo
+        });
+      }
 
-        const GK = gkey(ean, almacen, uso);
-        if(!group.has(GK)){
-          group.set(GK, {
-            ean,
-            concepto: m.concepto,
-            descripcion: m.descripcion,
-            almacen,
-            uso: (uso === "nuevo" ? "Nuevo" : "Usado"),
-            V: new Map(),
-            T: new Map(),
-            D: new Map()
-          });
-        }
-        const it = group.get(GK);
-
-        if (V !== 0) it.V.set(talla, (it.V.get(talla) || 0) + V);
-        if (T !== 0) it.T.set(talla, (it.T.get(talla) || 0) + T);
-        if (D !== 0) it.D.set(talla, (it.D.get(talla) || 0) + D);
-      });
+      // Usado
+      if ((v.usado || 0) !== 0 || (t.usado || 0) !== 0){
+        const csvVelneo = Number(v.usado||0);
+        const csvTiendas = Number(t.usado||0);
+        out.push({
+          EAN: ean,
+          Concepto: meta.concepto,
+          Descripcion: meta.descripcion,
+          Almacen: almacen,
+          Uso: "Usado",
+          Talla: talla,
+          CSVVelneo: csvVelneo,
+          CSVTiendas: csvTiendas,
+          TotalStockVelneo: csvTiendas - csvVelneo
+        });
+      }
     });
 
-    function sumMap(m){
-      let s=0; for(const v of m.values()) s += Number(v)||0;
-      return s;
-    }
-
-    const resultado = [];
-
-    for(const it of group.values()){
-      const totalV = sumMap(it.V);
-      const totalT = sumMap(it.T);
-      const totalD = sumMap(it.D);
-
-      if (totalV !== 0){
-        resultado.push({
-          EAN: it.ean,
-          Concepto: it.concepto,
-          Descripcion: it.descripcion,
-          Almacen: it.almacen,     // Velneo
-          Uso: it.uso,
-          Tallas: tallasToText(it.V),
-          Total: totalV
-        });
-      }
-      if (totalT !== 0){
-        resultado.push({
-          EAN: it.ean,
-          Concepto: it.concepto,
-          Descripcion: it.descripcion,
-          Almacen: "CSV",
-          Uso: it.uso,
-          Tallas: tallasToText(it.T),
-          Total: totalT
-        });
-      }
-      if (totalD !== 0){
-        resultado.push({
-          EAN: it.ean,
-          Concepto: it.concepto,
-          Descripcion: it.descripcion,
-          Almacen: "Dif",
-          Uso: it.uso,
-          Tallas: tallasToText(it.D),
-          Total: totalD
-        });
-      }
-    }
-
-    // ✅ Orden visible: Concepto/Descripcion/Uso, luego DIF/CSV/Velneo, y luego talla ASC
-    resultado.sort((a,b)=>{
-      const ak = `${a.Concepto} ${a.Descripcion} ${a.Uso}`;
-      const bk = `${b.Concepto} ${b.Descripcion} ${b.Uso}`;
-      if (ak !== bk) return ak.localeCompare(bk, "es");
-
-      const prio = (x)=> x.Almacen==="Dif" ? 0 : (x.Almacen==="CSV" ? 1 : 2);
-      const pa = prio(a), pb = prio(b);
-      if (pa !== pb) return pa - pb;
-
-      const ta = tallaKeyFromRow(a);
-      const tb = tallaKeyFromRow(b);
-      if (ta !== tb) return ta - tb; // ASC
-
-      return String(a.EAN||"").localeCompare(String(b.EAN||""), "es");
-    });
-
-    return resultado;
+    return out;
   };
 
 })();
