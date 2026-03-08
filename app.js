@@ -646,7 +646,7 @@ function renderTablaConciliacion(rows){
     const uso = get(r, "Uso");
     const des = get(r, "Descripcion", "Descripción", "Descripci�n");
     const alm = get(r, "Almacen", "Almacén");
-    const tal = get(r, "Tallas");
+    const tal = get(r, "Tallas","Talla");
     const con = get(r, "Concepto");
 
     const vVel = get(r, "CSVVelneo", "CSV Velneo");
@@ -943,3 +943,4 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
