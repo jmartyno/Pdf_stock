@@ -621,7 +621,7 @@ function renderTablaConciliacion(rows){
   const thead = document.createElement("thead");
   const trh = document.createElement("tr");
 
-  const headers = ["Uso","Descripcion","Almacen","Tallas","Concepto","CSV Velneo","CSV Tiendas","Total Stock Velneo","✅"];
+  const headers = ["Uso","Descripcion","Almacen","Concepto","Tallas","CSV Velneo","CSV Tiendas","Total Stock Velneo","✅"];
   headers.forEach(h=>{
     const th=document.createElement("th");
     th.textContent=h;
@@ -646,7 +646,7 @@ function renderTablaConciliacion(rows){
     const vTie = get(r, "CSVTiendas", "CSV Tiendas");
     const vTot = get(r, "TotalStockVelneo", "Total", "Total Stock Velneo");
 
-    const values = [uso, des, alm, tal, con, vVel, vTie, vTot];
+    const values = [uso, des, alm, con, tal, vVel, vTie, vTot];
 
     values.forEach(v=>{
       const td=document.createElement("td");
@@ -934,5 +934,6 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
 
 
