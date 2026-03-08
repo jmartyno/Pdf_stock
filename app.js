@@ -682,48 +682,58 @@ function renderTablaConciliacion(rows){
 }
 
 /* ====== Filtros vista conciliación ====== */
+
 function applyConciliacionViewFilters(){
   const q = ($("cQ")?.value || "").trim().toLowerCase();
   const qConcepto = ($("cConcepto")?.value || "").trim().toLowerCase();
-  const soloDif = !!$("cSoloDif")?.checked;
+  const soloDif = Boolean($("cSoloDif")?.checked);
   const usoSel = String($("cUso")?.value || "").trim();
 
-  let rows = state.concAll || [];
+  let rows = Array.isArray(state.concAll) ? [...state.concAll] : [];
 
   const getDiffValue = (r) => {
-    const raw = (r?.TotalStockVelneo ?? r?.Total ?? r?.["Total Stock Velneo"] ?? 0);
-    const n = Number(String(raw).replace(",", ".").trim());
+    const raw =
+      r?.TotalStockVelneo ??
+      r?.["Total Stock Velneo"] ??
+      r?.Total ??
+      0;
+
+    const txt = String(raw).trim().replace(",", ".");
+    const n = Number(txt);
     return Number.isFinite(n) ? n : 0;
   };
 
   if (qConcepto){
     rows = rows.filter(r =>
-      String(r.Concepto ?? "").toLowerCase().includes(qConcepto)
+      String(r?.Concepto ?? "").toLowerCase().includes(qConcepto)
     );
   }
 
   if (q){
     rows = rows.filter(r=>{
-      const c = String(r.Concepto ?? "").toLowerCase();
-      const d = String(r.Descripcion ?? "").toLowerCase();
+      const c = String(r?.Concepto ?? "").toLowerCase();
+      const d = String(r?.Descripcion ?? "").toLowerCase();
       return c.includes(q) || d.includes(q);
     });
   }
 
   if (usoSel){
-    rows = rows.filter(r => String(r.Uso ?? "") === usoSel);
+    rows = rows.filter(r => String(r?.Uso ?? "").trim() === usoSel);
   }
 
-  // ✅ SOLO DIFERENCIAS = Total Stock Velneo distinto de 0
   if (soloDif){
-    rows = rows.filter(r => getDiffValue(r) !== 0);
+    rows = rows.filter(r => Math.abs(getDiffValue(r)) > 0);
   }
 
-  state.concViewRows = [...rows];
-  setText("cMeta", `Líneas: ${rows.length} (Total generadas: ${(state.concAll||[]).length})`);
+  state.concViewRows = rows;
+
+  setText(
+    "cMeta",
+    `Líneas: ${rows.length} (Total generadas: ${(state.concAll || []).length})`
+  );
+
   renderTablaConciliacion(rows);
 }
-
 /* ====== Mappings por uso ====== */
 function buildMappingsForConciliacion(destAlmacen){
   const selTiendas = selectedChecklist("cTiendaList").map(t => String(t).trim().toLowerCase());
@@ -924,4 +934,5 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
 
