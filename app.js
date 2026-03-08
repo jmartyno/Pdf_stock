@@ -690,8 +690,16 @@ function applyConciliacionViewFilters(){
 
   let rows = state.concAll || [];
 
+  const getDiffValue = (r) => {
+    const raw = (r?.TotalStockVelneo ?? r?.Total ?? r?.["Total Stock Velneo"] ?? 0);
+    const n = Number(String(raw).replace(",", ".").trim());
+    return Number.isFinite(n) ? n : 0;
+  };
+
   if (qConcepto){
-    rows = rows.filter(r => String(r.Concepto ?? "").toLowerCase().includes(qConcepto));
+    rows = rows.filter(r =>
+      String(r.Concepto ?? "").toLowerCase().includes(qConcepto)
+    );
   }
 
   if (q){
@@ -702,12 +710,13 @@ function applyConciliacionViewFilters(){
     });
   }
 
-  if (soloDif){
-    rows = rows.filter(r => Number(r.TotalStockVelneo || 0) !== 0);
+  if (usoSel){
+    rows = rows.filter(r => String(r.Uso ?? "") === usoSel);
   }
 
-  if (usoSel){
-    rows = rows.filter(r => String(r.Uso) === usoSel);
+  // ✅ SOLO DIFERENCIAS = Total Stock Velneo distinto de 0
+  if (soloDif){
+    rows = rows.filter(r => getDiffValue(r) !== 0);
   }
 
   state.concViewRows = [...rows];
@@ -915,3 +924,4 @@ function setupUI(){
 }
 
 document.addEventListener("DOMContentLoaded", setupUI);
+
